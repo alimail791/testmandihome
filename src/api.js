@@ -91,6 +91,7 @@ export const api = {
     clearTokens();
   },
   me: () => request("/api/auth/me"),
+  updateAccount: (payload) => request("/api/auth/update-account", { method: "POST", body: payload }).then((data) => { setTokens(data); return data; }),
   verifyEmail: (uid, token) => request("/api/auth/verify-email", { method: "POST", body: { uid, token }, auth: false }),
   resendVerification: () => request("/api/auth/resend-verification", { method: "POST" }),
   forgotPassword: (email) => request("/api/auth/forgot-password", { method: "POST", body: { email }, auth: false }),
@@ -135,7 +136,9 @@ export const api = {
   // ---- seller payouts ----
   saveBankDetails: (payload) => request("/api/payouts/bank", { method: "POST", body: payload }),
   getMyPayouts: () => request("/api/payouts/mine"),
-  withdraw: (sellerShare) => request("/api/payouts/withdraw", { method: "POST", body: { sellerShare } }),
+  getSettings: () => request("/api/settings", { auth: false }),
+  updateSellerShare: (sellerSharePercent) => request("/api/admin/settings", { method: "PUT", body: { sellerSharePercent } }),
+  withdraw: () => request("/api/payouts/withdraw", { method: "POST" }),
 
   // ---- notifications ----
   getNotifications: () => request("/api/notifications"),

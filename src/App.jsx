@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { api } from "./api.js";
 import {
   Star, ShoppingCart, Plus, Clock, Users, TrendingUp, CheckCircle2, XCircle,
@@ -602,6 +602,14 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
     setErrorMsg("");
     try {
       const order = await api.createOrder({ kind, itemId, adDraft, applyReward });
+
+      if (order.free) {
+        // Backend already completed this at zero cost — nothing to pay for.
+        setResultRecord(order);
+        setPhase("success");
+        return;
+      }
+
       const loaded = await loadRazorpayScript();
       if (!loaded || !window.Razorpay) {
         setErrorMsg("Couldn't load the Razorpay checkout script — check your internet connection.");
@@ -941,7 +949,7 @@ function AdBanner({ ad }) {
   );
 }
 
-function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories }) {
+function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState("rating");
@@ -950,6 +958,9 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
   const activeAds = (ads || []).filter((a) => a.endTs > now);
   const homepageAd = activeAds.find((a) => a.placement === "homepage");
   const categoryAd = cat !== "All" ? activeAds.find((a) => a.placement === cat) : null;
+
+  const sharedTest = sharedItemId ? tests.find((t) => t.id === sharedItemId) : null;
+  const sharedBundle = !sharedTest && sharedItemId ? bundles.find((b) => b.id === sharedItemId) : null;
 
   const filtered = useMemo(() => {
     let list = tests.filter((t) =>
@@ -981,6 +992,31 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
       </div>
 
       <div style={{ padding: "26px 28px 8px" }}>
+        {(sharedTest || sharedBundle) && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Share2 size={15} color={T.saffronDeep} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: T.saffronDeep }}>
+                Shared with you
+              </span>
+            </div>
+            <div className="grid-cards" style={{ maxWidth: 380 }}>
+              {sharedTest && (
+                <TestCard test={sharedTest} purchased={purchasedIds.has(sharedTest.id)} onBuy={() => onBuy(sharedTest)} onOpenLearning={goLearning} />
+              )}
+              {sharedBundle && (
+                <BundleCard
+                  bundle={sharedBundle}
+                  testsById={Object.fromEntries(tests.map((t) => [t.id, t]))}
+                  purchased={purchasedBundleIds.has(sharedBundle.id)}
+                  onBuy={() => onBuyBundle(sharedBundle)}
+                  onOpenLearning={goLearning}
+                />
+              )}
+            </div>
+            <div className="ticket-perforation" style={{ margin: "20px 0 0", borderTopStyle: "dashed" }} />
+          </div>
+        )}
         {homepageAd && <AdBanner ad={homepageAd} />}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
           <div className="search-box">
@@ -1194,6 +1230,7 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
   const [confirmNumber, setConfirmNumber] = useState("");
   const [ifsc, setIfsc] = useState(bankDetails?.ifsc || "");
   const [bankName, setBankName] = useState(bankDetails?.bankName || "");
+  const [upiId, setUpiId] = useState(bankDetails?.upiId || "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -1212,17 +1249,28 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
   };
 
   const saveBank = async () => {
-    if (!accName.trim() || !accNumber.trim() || !ifsc.trim() || !bankName.trim()) { setError("Fill in every field."); return; }
-    const cleanAccNumber = accNumber.replace(/\s+/g, "");
-    const cleanConfirm = confirmNumber.replace(/\s+/g, "");
-    if (cleanAccNumber !== cleanConfirm) { setError("Account numbers don't match — check both fields carefully."); return; }
+    if (!accName.trim()) { setError("Enter your name."); return; }
+    const wantsBank = accNumber.trim() || ifsc.trim() || bankName.trim();
+    const wantsUpi = upiId.trim();
+    if (!wantsBank && !wantsUpi) { setError("Add either bank details or a UPI ID (or both)."); return; }
+    let cleanAccNumber = "";
+    if (wantsBank) {
+      if (!accNumber.trim() || !ifsc.trim() || !bankName.trim()) { setError("Fill in all three bank fields, or leave all three blank and use UPI instead."); return; }
+      cleanAccNumber = accNumber.replace(/\s+/g, "");
+      const cleanConfirm = confirmNumber.replace(/\s+/g, "");
+      if (cleanAccNumber !== cleanConfirm) { setError("Account numbers don't match — check both fields carefully."); return; }
+    }
     setError("");
     setSaving(true);
     try {
-      await onSaveBank({ accName: accName.trim(), accountNumber: cleanAccNumber, ifsc: ifsc.trim().toUpperCase(), bankName: bankName.trim() });
+      await onSaveBank({
+        accName: accName.trim(),
+        ...(wantsBank ? { accountNumber: cleanAccNumber, ifsc: ifsc.trim().toUpperCase(), bankName: bankName.trim() } : {}),
+        ...(wantsUpi ? { upiId: upiId.trim() } : {}),
+      });
       setEditingBank(false);
     } catch (err) {
-      setError(err.message || "Couldn't save bank details — please try again.");
+      setError(err.message || "Couldn't save your payout details — please try again.");
     } finally {
       setSaving(false);
     }
@@ -1235,7 +1283,7 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
           <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, display: "flex", alignItems: "center", gap: 8 }}>
             <Landmark size={17} /> Bank & payouts
           </div>
-          <div style={{ fontSize: 12.5, color: T.muted, marginTop: 2 }}>Withdraw your earnings straight to your linked bank account.</div>
+          <div style={{ fontSize: 12.5, color: T.muted, marginTop: 2 }}>Withdraw your earnings via bank transfer or UPI.</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="stub-label">Available to withdraw</div>
@@ -1249,15 +1297,19 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
         {!editingBank && bankDetails ? (
           <div className="ledger-row" style={{ padding: "12px 16px" }}>
             <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                <div style={{ fontSize: 14, color: T.ink }}>{bankDetails.accName} · {bankDetails.bankName}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 14, color: T.ink }}>{bankDetails.accName}{bankDetails.bankName ? ` · ${bankDetails.bankName}` : ""}</div>
                 {payoutsReady ? (
                   <span className="offer-chip" style={{ background: "rgba(47,122,79,0.12)", borderColor: T.green, color: T.green }}>Real bank transfer</span>
                 ) : (
                   <span className="blocked-badge" style={{ background: "rgba(232,163,61,0.14)", borderColor: T.saffron, color: T.saffronDeep }}>Paid manually by admin</span>
                 )}
               </div>
-              <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>A/C •••• {bankDetails.last4} · IFSC {bankDetails.ifsc}</div>
+              <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>
+                {bankDetails.last4 && <>A/C •••• {bankDetails.last4} · IFSC {bankDetails.ifsc}</>}
+                {bankDetails.last4 && bankDetails.upiId && " · "}
+                {bankDetails.upiId && <>UPI {bankDetails.upiId}</>}
+              </div>
             </div>
             <button className="btn-outline" onClick={() => setEditingBank(true)}>Edit</button>
             <button className="btn-primary" disabled={available <= 0 || withdrawing} style={{ opacity: (available <= 0 || withdrawing) ? 0.5 : 1 }} onClick={doWithdraw}>
@@ -1266,12 +1318,26 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
+            <label className="field-label">Account holder name
+              <input className="field-input" value={accName} onChange={(e) => setAccName(e.target.value)} />
+            </label>
+
+            <div className="split-note" style={{ fontSize: 12, marginTop: 2 }}>
+              Add UPI, full bank details, or both. UPI is the fastest way to get set up for manual payouts.
+            </div>
+
+            <label className="field-label">UPI ID
+              <input className="field-input" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="yourname@upi" />
+            </label>
+
+            <div style={{ fontSize: 11.5, color: T.muted, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "var(--font-mono)", marginTop: 4 }}>— and/or —</div>
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <label className="field-label">Account holder name
-                <input className="field-input" value={accName} onChange={(e) => setAccName(e.target.value)} />
-              </label>
               <label className="field-label">Bank name
                 <input className="field-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. Indian Bank" />
+              </label>
+              <label className="field-label">IFSC code
+                <input className="field-input" value={ifsc} onChange={(e) => setIfsc(e.target.value)} placeholder="e.g. SBIN0001234" />
               </label>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1282,12 +1348,9 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
                 <input className="field-input" value={confirmNumber} onChange={(e) => setConfirmNumber(e.target.value)} />
               </label>
             </div>
-            <label className="field-label">IFSC code
-              <input className="field-input" value={ifsc} onChange={(e) => setIfsc(e.target.value)} placeholder="e.g. SBIN0001234" />
-            </label>
             {error && <div style={{ color: T.red, fontSize: 12.5 }}>{error}</div>}
             <button className="btn-primary" style={{ justifySelf: "start", opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={saveBank}>
-              {saving ? <Loader2 size={14} className="spin" /> : <><CheckCircle2 size={14} /> Save bank details</>}
+              {saving ? <Loader2 size={14} className="spin" /> : <><CheckCircle2 size={14} /> Save payout details</>}
             </button>
           </div>
         )}
@@ -1637,6 +1700,7 @@ function TestRunner({ test, onSubmit, onExit }) {
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [startedAt] = useState(() => Date.now());
+  const [secondsLeft, setSecondsLeft] = useState(test.duration * 60);
   const total = test.questions.length;
 
   const select = (optIdx) => setAnswers((a) => ({ ...a, [qIndex]: optIdx }));
@@ -1653,6 +1717,20 @@ function TestRunner({ test, onSubmit, onExit }) {
     onSubmit({ score, total, answers, topicMap, timeTakenSeconds });
   };
 
+  // Real countdown, independent of answers/qIndex state — ticks every second
+  // and auto-submits whatever's answered so far once time runs out.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    if (secondsLeft <= 0) { submitRef.current(); return; }
+    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [secondsLeft]);
+
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  const timeLow = secondsLeft <= 60;
+
   const qu = test.questions[qIndex];
 
   return (
@@ -1662,7 +1740,12 @@ function TestRunner({ test, onSubmit, onExit }) {
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: T.saffronDeep, letterSpacing: "0.1em", textTransform: "uppercase" }}>Attempting</div>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: T.ink }}>{test.title}</div>
         </div>
-        <button className="btn-outline" onClick={onExit}><X size={14} /> Exit test</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div className="timer-pill" style={{ color: timeLow ? T.red : T.ink, borderColor: timeLow ? T.red : T.line }}>
+            <Timer size={14} /> {mins}:{secs.toString().padStart(2, "0")}
+          </div>
+          <button className="btn-outline" onClick={onExit}><X size={14} /> Exit test</button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
@@ -2181,34 +2264,110 @@ function PendingPayoutsManager() {
       {error && <div style={{ color: T.red, fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
       {payouts.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>No pending manual payouts right now.</div>}
       <div style={{ display: "grid", gap: 10 }}>
-        {payouts.map((p) => (
-          <div key={p.id} className="ledger-row">
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: T.ink }}>{p.seller?.name || p.sellerEmail}</div>
-              <div style={{ fontSize: 12.5, color: T.muted }}>{p.sellerEmail}</div>
-              {p.seller?.bankDetails ? (
-                <div style={{ fontSize: 12.5, color: T.inkSoft, fontFamily: "var(--font-mono)", marginTop: 4 }}>
-                  {p.seller.bankDetails.accName} · {p.seller.bankDetails.bankName} · A/C •••• {p.seller.bankDetails.last4} · IFSC {p.seller.bankDetails.ifsc}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12.5, color: T.red, marginTop: 4 }}>No bank details on file</div>
+        {payouts.map((p) => {
+          const bd = p.seller?.bankDetails;
+          const upiUri = bd?.upiId
+            ? `upi://pay?pa=${encodeURIComponent(bd.upiId)}&pn=${encodeURIComponent(bd.accName || p.seller.name)}&am=${p.amount}&cu=INR&tn=${encodeURIComponent("TestMandi payout")}`
+            : null;
+          return (
+            <div key={p.id} className="ledger-row">
+              {upiUri && (
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(upiUri)}`}
+                  alt="Scan to pay via UPI" width={90} height={90} style={{ borderRadius: 6, border: `1px solid ${T.line}`, flexShrink: 0 }}
+                />
               )}
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: T.ink }}>{p.seller?.name || p.sellerEmail}</div>
+                <div style={{ fontSize: 12.5, color: T.muted }}>{p.sellerEmail}</div>
+                {bd?.upiId && (
+                  <div style={{ fontSize: 12.5, color: T.inkSoft, fontFamily: "var(--font-mono)", marginTop: 4 }}>UPI: {bd.upiId} (scan to pay ₹{p.amount} directly)</div>
+                )}
+                {bd?.last4 && (
+                  <div style={{ fontSize: 12.5, color: T.inkSoft, fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                    {bd.accName} · {bd.bankName} · A/C •••• {bd.last4} · IFSC {bd.ifsc}
+                  </div>
+                )}
+                {!bd?.upiId && !bd?.last4 && <div style={{ fontSize: 12.5, color: T.red, marginTop: 4 }}>No payout details on file</div>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>₹{p.amount.toLocaleString("en-IN")}</div>
+                <button className="btn-outline" disabled={busyId === p.id} onClick={() => resolve(p.id, "rejected")}>Reject</button>
+                <button className="btn-primary" disabled={busyId === p.id} onClick={() => resolve(p.id, "paid")}>
+                  {busyId === p.id ? <Loader2 size={14} className="spin" /> : "Mark as paid"}
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>₹{p.amount.toLocaleString("en-IN")}</div>
-              <button className="btn-outline" disabled={busyId === p.id} onClick={() => resolve(p.id, "rejected")}>Reject</button>
-              <button className="btn-primary" disabled={busyId === p.id} onClick={() => resolve(p.id, "paid")}>
-                {busyId === p.id ? <Loader2 size={14} className="spin" /> : "Mark as paid"}
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function Admin({ tests, purchases, bundles, bundlePurchases, sellerShare, setSellerShare, categories, onAddCategory, onRemoveCategory, registeredUsers, onRemoveAccount, notifications, onSendNotification, ads, onDeleteTest, onDeleteBundle, onDeleteAd }) {
+function AdminAccountSettings({ session, onAccountUpdated }) {
+  const [newEmail, setNewEmail] = useState(session.email);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setError(""); setSuccess(false);
+    if (!currentPassword) { setError("Enter your current password to confirm this change."); return; }
+    if (newPassword && newPassword !== confirmPassword) { setError("New passwords don't match."); return; }
+    const payload = { currentPassword };
+    if (newEmail.trim().toLowerCase() !== session.email) payload.newEmail = newEmail.trim();
+    if (newPassword) payload.newPassword = newPassword;
+    if (!payload.newEmail && !payload.newPassword) { setError("Change the email or password first."); return; }
+
+    setSaving(true);
+    try {
+      const { user } = await api.updateAccount(payload);
+      onAccountUpdated(user);
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      setSuccess(true);
+    } catch (err) {
+      setError(err.message || "Couldn't update your account.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="split-panel" style={{ marginBottom: 30 }}>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, marginBottom: 4 }}>Your admin account</div>
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 14 }}>
+        Change your own login email and/or password directly here — no email link needed.
+      </div>
+      <div style={{ display: "grid", gap: 10, maxWidth: 380 }}>
+        <label className="field-label">Email
+          <input className="field-input" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+        </label>
+        <label className="field-label">New password (leave blank to keep current)
+          <input className="field-input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+        </label>
+        {newPassword && (
+          <label className="field-label">Confirm new password
+            <input className="field-input" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          </label>
+        )}
+        <label className="field-label">Current password (required to confirm)
+          <input className="field-input" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+        </label>
+        {error && <div style={{ color: T.red, fontSize: 12.5 }}>{error}</div>}
+        {success && <div style={{ color: T.green, fontSize: 12.5 }}>Account updated.</div>}
+        <button className="btn-primary" style={{ justifySelf: "start", opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={submit}>
+          {saving ? <Loader2 size={14} className="spin" /> : "Save changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Admin({ tests, purchases, bundles, bundlePurchases, sellerShare, setSellerShare, sellerShareError, categories, onAddCategory, onRemoveCategory, registeredUsers, onRemoveAccount, notifications, onSendNotification, ads, onDeleteTest, onDeleteBundle, onDeleteAd, session, onAccountUpdated }) {
   const gmv = purchases.reduce((s, p) => s + p.price, 0) + (bundlePurchases || []).reduce((s, p) => s + p.price, 0);
   const commission = Math.round(gmv * (1 - sellerShare / 100));
   const sellerSet = new Set([...tests.map((t) => t.sellerName), ...(bundles || []).map((b) => b.sellerName)]);
@@ -2242,6 +2401,8 @@ function Admin({ tests, purchases, bundles, bundlePurchases, sellerShare, setSel
         <div className="stub"><div className="stub-label">Buyers</div><div className="stub-value">{buyerSet.size}</div></div>
       </div>
 
+      <AdminAccountSettings session={session} onAccountUpdated={onAccountUpdated} />
+
       <div className="split-panel">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink }}>Default profit split</div>
@@ -2254,8 +2415,9 @@ function Admin({ tests, purchases, bundles, bundlePurchases, sellerShare, setSel
           onChange={(e) => setSellerShare(Number(e.target.value))}
           className="range-input"
         />
+        {sellerShareError && <div style={{ color: T.red, fontSize: 12.5, marginTop: 8 }}>{sellerShareError}</div>}
         <div style={{ fontSize: 12.5, color: T.muted, marginTop: 8 }}>
-          Applies to all current listings. Individual revenue-share deals per seller can be layered on top in a production build.
+          Saves immediately as you drag, and takes effect for every seller right away — no refresh needed.
         </div>
       </div>
 
@@ -2513,6 +2675,19 @@ export default function App() {
   const [marketplaceAds, setMarketplaceAds] = useState([]);
   const [pendingAd, setPendingAd] = useState(null);
   const [sellerShare, setSellerShare] = useState(70);
+  const [sellerShareError, setSellerShareError] = useState("");
+
+  const commitSellerShare = async (pct) => {
+    const previous = sellerShare;
+    setSellerShare(pct); // optimistic — slider already shows this locally
+    setSellerShareError("");
+    try {
+      await api.updateSellerShare(pct);
+    } catch (err) {
+      setSellerShare(previous); // revert if the server rejected it
+      setSellerShareError(err.message || "Couldn't save the new split — please try again.");
+    }
+  };
   const [activeTestId, setActiveTestId] = useState(null);
   const [reportAttemptId, setReportAttemptId] = useState(null);
   const [categories, setCategories] = useState(CATEGORIES_SEED);
@@ -2543,6 +2718,10 @@ export default function App() {
   const [urlReferralCode] = useState(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("ref") || "";
+  });
+  const [sharedItemId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("test") || "";
   });
   const [authAction, setAuthAction] = useState(() => {
     if (typeof window === "undefined") return null;
@@ -2666,12 +2845,13 @@ export default function App() {
   // app still shows something rather than going blank.
   const [backendUnreachable, setBackendUnreachable] = useState(false);
   useEffect(() => {
-    Promise.all([api.getCategories(), api.getTests(), api.getBundles(), api.getActiveAds()])
-      .then(([catData, testData, bundleData, adData]) => {
+    Promise.all([api.getCategories(), api.getTests(), api.getBundles(), api.getActiveAds(), api.getSettings()])
+      .then(([catData, testData, bundleData, adData, settingsData]) => {
         setCategories(catData.categories);
         setTests(testData.tests);
         setBundles(bundleData.bundles);
         setMarketplaceAds(adData.ads);
+        setSellerShare(settingsData.sellerSharePercent);
         setBackendUnreachable(false);
       })
       .catch(() => setBackendUnreachable(true));
@@ -2870,6 +3050,7 @@ export default function App() {
         .split-note { font-size: 12.5px; color: ${T.muted}; background: rgba(232,163,61,0.12); border: 1px solid ${T.saffron}; border-radius: 6px; padding: 10px 12px; }
 
         .q-pill { width: 30px; height: 30px; border-radius: 6px; border: 1px solid ${T.line}; font-family: var(--font-mono); font-size: 12px; }
+        .timer-pill { display: flex; align-items: center; gap: 6px; border: 1.5px solid ${T.line}; border-radius: 999px; padding: 6px 14px; font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
         .question-panel { background: #fff; border: 1px solid ${T.line}; border-radius: 10px; padding: 22px; }
         .option-row { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid ${T.line}; border-radius: 7px; padding: 11px 13px; font-size: 14px; color: ${T.ink}; }
         .option-mark { width: 22px; height: 22px; border: 1.5px solid ${T.line}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: var(--font-mono); flex-shrink: 0; }
@@ -2957,6 +3138,42 @@ export default function App() {
         .split-pitch-caption { font-size: 11.5px; color: ${T.muted}; margin-top: 4px; max-width: 130px; }
 
         .referral-promo { display: flex; gap: 8px; align-items: flex-start; background: rgba(232,163,61,0.12); border: 1px solid ${T.saffron}; border-radius: 8px; padding: 10px 12px; margin-top: 14px; font-size: 12.5px; color: ${T.ink}; line-height: 1.4; }
+
+        /* ---------------------------------------------------------------- */
+        /* Mobile                                                           */
+        /* ---------------------------------------------------------------- */
+        @media (max-width: 720px) {
+          .topnav { padding: 0 12px; gap: 8px; }
+          .brand { font-size: 16px; gap: 6px; }
+          .brand-mark { width: 24px; height: 24px; }
+          .nav-tabs { flex: 1; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 2px; }
+          .nav-tabs::-webkit-scrollbar { display: none; }
+          .nav-tab { padding: 8px 9px; flex-shrink: 0; }
+          .nav-tab-label { display: none; }
+          .auth-controls { gap: 6px; }
+          .admin-link-btn { display: none; }
+          .nav-login-label { display: none; }
+          .session-chip { padding: 4px 8px 4px 4px; gap: 5px; }
+          .session-role { display: none; }
+
+          .hero-band { padding: 28px 16px 26px; }
+          .grid-cards { grid-template-columns: 1fr; }
+          .modal-card { max-width: calc(100vw - 32px) !important; }
+          .modal-backdrop { padding: 12px; }
+          .stub-strip { grid-template-columns: repeat(2, 1fr); }
+          .split-pitch { padding: 16px; gap: 16px; }
+          .split-pitch-figure { flex: 1 1 40%; }
+          .ledger-row { padding: 12px; }
+          .ledger-figures { gap: 12px; width: 100%; justify-content: space-between; }
+          .question-panel { padding: 16px; }
+          .option-row { padding: 10px; font-size: 13.5px; }
+          .chat-panel { right: 10px; left: 10px; width: auto; bottom: 78px; }
+          .chat-fab { right: 14px; bottom: 14px; }
+          .notif-panel { right: 10px; left: 10px; width: auto; }
+          .role-toggle { flex-direction: column; }
+          .role-toggle-btn { border-right: none; border-bottom: 1px solid ${T.line}; }
+          .role-toggle-btn:last-child { border-bottom: none; }
+        }
       `}</style>
 
       <div className="topnav">
@@ -2985,7 +3202,7 @@ export default function App() {
           ) : (
             <>
               <button className="admin-link-btn" onClick={() => openAuth("admin", "login")} title="Admin sign-in">Admin</button>
-              <button className="nav-login-btn" onClick={() => openAuth("buyer", "login")}><LogIn size={15} /> Log in / Register</button>
+              <button className="nav-login-btn" onClick={() => openAuth("buyer", "login")}><LogIn size={15} /> <span className="nav-login-label">Log in / Register</span></button>
             </>
           )}
         </div>
@@ -3011,6 +3228,7 @@ export default function App() {
           goLearning={() => setRole("learning")}
           sellerShare={sellerShare}
           categories={categories}
+          sharedItemId={sharedItemId}
         />
       )}
       {role === "seller" && (
@@ -3063,7 +3281,8 @@ export default function App() {
           bundles={adminData.bundles}
           bundlePurchases={adminData.bundlePurchases}
           sellerShare={sellerShare}
-          setSellerShare={setSellerShare}
+          setSellerShare={commitSellerShare}
+          sellerShareError={sellerShareError}
           categories={categories}
           onAddCategory={addCategory}
           onRemoveCategory={removeCategory}
@@ -3075,6 +3294,8 @@ export default function App() {
           onDeleteTest={deleteTestAsAdmin}
           onDeleteBundle={deleteBundleAsAdmin}
           onDeleteAd={deleteAdAsAdmin}
+          session={session}
+          onAccountUpdated={(u) => { upsertLocalUser(u); setSession(u); }}
         />
       )}
 
