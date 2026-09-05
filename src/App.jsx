@@ -1243,10 +1243,30 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
   const [ifsc, setIfsc] = useState(bankDetails?.ifsc || "");
   const [bankName, setBankName] = useState(bankDetails?.bankName || "");
   const [upiId, setUpiId] = useState(bankDetails?.upiId || "");
+  const [qrImage, setQrImage] = useState(bankDetails?.upiQrImage || "");
+  const [qrError, setQrError] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState("");
+
+  const onQrFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setQrError("");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setQrError("Please upload a PNG, JPG, or WEBP image.");
+      return;
+    }
+    if (file.size > 1_000_000) {
+      setQrError("That image is too large — please use a smaller file (under 1MB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setQrImage(reader.result);
+    reader.onerror = () => setQrError("Couldn't read that file — please try again.");
+    reader.readAsDataURL(file);
+  };
 
   const doWithdraw = async () => {
     setWithdrawError("");
@@ -1264,7 +1284,8 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
     if (!accName.trim()) { setError("Enter your name."); return; }
     const wantsBank = accNumber.trim() || ifsc.trim() || bankName.trim();
     const wantsUpi = upiId.trim();
-    if (!wantsBank && !wantsUpi) { setError("Add either bank details or a UPI ID (or both)."); return; }
+    const wantsQr = qrImage.trim();
+    if (!wantsBank && !wantsUpi && !wantsQr) { setError("Add a UPI ID, a UPI QR code image, or full bank details (or any combination)."); return; }
     let cleanAccNumber = "";
     if (wantsBank) {
       if (!accNumber.trim() || !ifsc.trim() || !bankName.trim()) { setError("Fill in all three bank fields, or leave all three blank and use UPI instead."); return; }
@@ -1279,6 +1300,7 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
         accName: accName.trim(),
         ...(wantsBank ? { accountNumber: cleanAccNumber, ifsc: ifsc.trim().toUpperCase(), bankName: bankName.trim() } : {}),
         ...(wantsUpi ? { upiId: upiId.trim() } : {}),
+        ...(wantsQr ? { upiQrImage: qrImage.trim() } : {}),
       });
       setEditingBank(false);
     } catch (err) {
@@ -1321,6 +1343,8 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
                 {bankDetails.last4 && <>A/C •••• {bankDetails.last4} · IFSC {bankDetails.ifsc}</>}
                 {bankDetails.last4 && bankDetails.upiId && " · "}
                 {bankDetails.upiId && <>UPI {bankDetails.upiId}</>}
+                {(bankDetails.last4 || bankDetails.upiId) && bankDetails.upiQrImage && " · "}
+                {bankDetails.upiQrImage && <>QR code uploaded</>}
               </div>
             </div>
             <button className="btn-outline" onClick={() => setEditingBank(true)}>Edit</button>
@@ -1341,6 +1365,17 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
             <label className="field-label">UPI ID
               <input className="field-input" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="yourname@upi" />
             </label>
+
+            <label className="field-label">Or upload your UPI QR code image (from GPay, PhonePe, your bank app, etc.)
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="field-input" onChange={onQrFileSelected} />
+            </label>
+            {qrError && <div style={{ color: T.red, fontSize: 12.5 }}>{qrError}</div>}
+            {qrImage && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <img src={qrImage} alt="Your uploaded UPI QR code" width={72} height={72} style={{ borderRadius: 6, border: `1px solid ${T.line}`, objectFit: "contain" }} />
+                <button className="link-btn" onClick={() => setQrImage("")}>Remove image</button>
+              </div>
+            )}
 
             <div style={{ fontSize: 11.5, color: T.muted, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "var(--font-mono)", marginTop: 4 }}>— and/or —</div>
 
@@ -2281,12 +2316,16 @@ function PendingPayoutsManager() {
           const upiUri = bd?.upiId
             ? `upi://pay?pa=${encodeURIComponent(bd.upiId)}&pn=${encodeURIComponent(bd.accName || p.seller.name)}&am=${p.amount}&cu=INR&tn=${encodeURIComponent("TestMandi payout")}`
             : null;
+          // Prefer the seller's own uploaded QR (it's exactly what they actually
+          // use) — only fall back to a generated one if they gave a UPI ID instead.
+          const qrSrc = bd?.upiQrImage || (upiUri ? `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(upiUri)}` : null);
+          const hasAnyDetails = bd?.upiId || bd?.upiQrImage || bd?.accountNumber;
           return (
             <div key={p.id} className="ledger-row">
-              {upiUri && (
+              {qrSrc && (
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(upiUri)}`}
-                  alt="Scan to pay via UPI" width={90} height={90} style={{ borderRadius: 6, border: `1px solid ${T.line}`, flexShrink: 0 }}
+                  src={qrSrc}
+                  alt="Scan to pay via UPI" width={90} height={90} style={{ borderRadius: 6, border: `1px solid ${T.line}`, flexShrink: 0, objectFit: "contain", background: "#fff" }}
                 />
               )}
               <div style={{ flex: 1, minWidth: 220 }}>
@@ -2295,12 +2334,15 @@ function PendingPayoutsManager() {
                 {bd?.upiId && (
                   <div style={{ fontSize: 12.5, color: T.inkSoft, fontFamily: "var(--font-mono)", marginTop: 4 }}>UPI: {bd.upiId} (scan to pay ₹{p.amount} directly)</div>
                 )}
-                {bd?.last4 && (
+                {bd?.upiQrImage && !bd?.upiId && (
+                  <div style={{ fontSize: 12.5, color: T.inkSoft, marginTop: 4 }}>Seller-uploaded QR code — scan to pay ₹{p.amount}</div>
+                )}
+                {bd?.accountNumber && (
                   <div style={{ fontSize: 12.5, color: T.inkSoft, fontFamily: "var(--font-mono)", marginTop: 2 }}>
-                    {bd.accName} · {bd.bankName} · A/C •••• {bd.last4} · IFSC {bd.ifsc}
+                    {bd.accName} · {bd.bankName} · A/C {bd.accountNumber} · IFSC {bd.ifsc}
                   </div>
                 )}
-                {!bd?.upiId && !bd?.last4 && <div style={{ fontSize: 12.5, color: T.red, marginTop: 4 }}>No payout details on file</div>}
+                {!hasAnyDetails && <div style={{ fontSize: 12.5, color: T.red, marginTop: 4 }}>No payout details on file</div>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>₹{p.amount.toLocaleString("en-IN")}</div>
@@ -2974,8 +3016,7 @@ export default function App() {
   };
 
   const saveSellerBank = async (details) => {
-    const { accName, accountNumber, ifsc, bankName } = details;
-    const { bankDetails } = await api.saveBankDetails({ accName, accountNumber, ifsc, bankName });
+    const { bankDetails } = await api.saveBankDetails(details);
     setSellerPayouts((p) => ({ ...p, bankDetails }));
   };
 
