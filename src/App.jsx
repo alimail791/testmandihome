@@ -216,11 +216,13 @@ function SectionLabel({ eyebrow, title, right }) {
 function VerifyEmailBanner() {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [emailConfigured, setEmailConfigured] = useState(true);
 
   const resend = async () => {
     setSending(true);
     try {
-      await api.resendVerification();
+      const data = await api.resendVerification();
+      setEmailConfigured(data.emailConfigured !== false);
       setSent(true);
     } catch (e) { /* stays unsent, button remains clickable */ }
     setSending(false);
@@ -231,7 +233,9 @@ function VerifyEmailBanner() {
       <ShieldCheck size={14} />
       <span>
         {sent
-          ? "Verification email sent — check your backend terminal for the simulated email and open the link."
+          ? (emailConfigured
+              ? "Verification email sent — check your inbox for the link."
+              : "Verification link generated — check your backend terminal for the simulated email and open the link.")
           : "Please verify your email address."}
       </span>
       {!sent && (
@@ -349,6 +353,7 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
   const [localError, setLocalError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotSubmitting, setForgotSubmitting] = useState(false);
+  const [forgotEmailConfigured, setForgotEmailConfigured] = useState(true);
 
   const submitRegister = () => {
     if (!name.trim() || !email.trim() || !password.trim() || ((accType === "seller" || accType === "advertiser") && !businessName.trim())) {
@@ -370,7 +375,8 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
     setLocalError("");
     setForgotSubmitting(true);
     try {
-      await api.forgotPassword(email.trim().toLowerCase());
+      const data = await api.forgotPassword(email.trim().toLowerCase());
+      setForgotEmailConfigured(data.emailConfigured !== false);
       setForgotSent(true);
     } catch (err) {
       setLocalError(err.message || "Something went wrong — try again.");
@@ -391,12 +397,18 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
             {forgotSent ? (
               <div style={{ textAlign: "center", padding: "10px 0 6px" }}>
                 <CheckCircle2 size={32} color={T.green} style={{ margin: "0 auto 12px" }} />
-                <div style={{ fontSize: 13.5, color: T.ink, lineHeight: 1.5 }}>
-                  If that email is registered, a reset link has been sent. Since this is a local dev server with no email
-                  provider connected, check your <strong>backend terminal window</strong> for a block starting with
-                  <code style={{ background: T.paperAlt, padding: "1px 5px", borderRadius: 4, margin: "0 3px" }}>--- simulated email ---</code>
-                  and open the link it prints.
-                </div>
+                {forgotEmailConfigured ? (
+                  <div style={{ fontSize: 13.5, color: T.ink, lineHeight: 1.5 }}>
+                    If that email is registered, a reset link has been sent — check your inbox (and spam folder) for it.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13.5, color: T.ink, lineHeight: 1.5 }}>
+                    If that email is registered, a reset link has been generated. Since this server has no email
+                    provider connected yet, check the <strong>backend terminal window</strong> for a block starting with
+                    <code style={{ background: T.paperAlt, padding: "1px 5px", borderRadius: 4, margin: "0 3px" }}>--- email not sent (SMTP not configured) ---</code>
+                    and open the link it prints.
+                  </div>
+                )}
               </div>
             ) : (
               <>
