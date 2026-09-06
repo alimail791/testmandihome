@@ -7,6 +7,7 @@ import {
   LogIn, LogOut, User, Landmark, ShieldCheck, CreditCard, Smartphone,
   Building2, ArrowDownToLine, Loader2, Lock, MessageCircle, Send, Bot,
   Share2, Copy, Bell, Gift, Timer, Megaphone, Check, Sparkles, ShieldOff, Package,
+  HelpCircle, Download,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -2645,6 +2646,215 @@ function NotificationBell({ notifications, session }) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Help — in-app guides for buyers, sellers, and advertisers               */
+/* ---------------------------------------------------------------------- */
+const HELP_GUIDES = {
+  buyer: {
+    title: "Using TestMandi", subtitle: "A Buyer's Guide", pdf: "/buyer-guide.pdf",
+    sections: [
+      { heading: "1. Register as a Buyer", body: [
+        { type: "ol", items: [
+          "Click \u201cLog in / Register\u201d in the top-right corner.",
+          "Select \u201cBuyer\u201d \u2014 not Seller or Advertiser.",
+          "Fill in your name, email, phone number, and a password (at least 8 characters).",
+          "If a friend referred you, enter their referral code in the optional field.",
+          "Click Register.",
+        ] },
+        { type: "callout", text: "You're logged in immediately after registering." },
+      ] },
+      { heading: "2. Verify Your Email", body: [
+        { type: "ul", items: [
+          "An amber banner appears: \u201cPlease verify your email address.\u201d",
+          "Check your inbox for the verification link and click it.",
+          "Didn't get it? Click \u201cResend email\u201d on the banner.",
+        ] },
+      ] },
+      { heading: "3. Browse the Marketplace", body: [
+        { type: "ul", items: [
+          "Search by test title or seller name, and filter by category.",
+          "Sort by rating or price.",
+          "Look for \u201cBest value\u201d bundles \u2014 multiple tests packaged at a discount.",
+        ] },
+      ] },
+      { heading: "4. Buy a Test", body: [
+        { type: "ol", items: [
+          "Click Buy on any test (or Buy bundle).",
+          "If you have an unused referral reward, check the box for 50% off.",
+          "Pay via UPI, card, or netbanking.",
+          "The test unlocks immediately in My Learning.",
+        ] },
+        { type: "callout", text: "Some tests are free (\u20b90) \u2014 clicking Buy unlocks these instantly with no payment step." },
+      ] },
+      { heading: "5. Take the Test", body: [
+        { type: "ol", items: [
+          "Go to My Learning and click Start test on anything you've purchased.",
+          "A live countdown timer tracks the test's duration \u2014 it auto-submits the moment time runs out.",
+          "Click Submit test whenever you're ready, or let the timer do it.",
+        ] },
+      ] },
+      { heading: "6. Understand Your Score Report", body: [
+        { type: "ul", items: [
+          "Accuracy and time taken, compared to your previous best attempt.",
+          "A topic-wise breakdown chart showing exactly where you're strong or weak.",
+          "A question-by-question review with explanations.",
+          "An improvement chart once you've retaken a test.",
+        ] },
+      ] },
+      { heading: "7. Rate Tests & Refer Friends", body: [
+        { type: "p", text: "Rate any test 1\u20135 stars after your report. In My Learning \u2192 Refer & earn, you'll find your referral code and link \u2014 the moment someone you refer makes their first purchase, you get 50% off your own next one." },
+      ] },
+    ],
+  },
+  seller: {
+    title: "Selling on TestMandi", subtitle: "A Seller's Guide", pdf: "/seller-guide.pdf",
+    sections: [
+      { heading: "1. Register as a Seller", body: [
+        { type: "ol", items: [
+          "Click \u201cLog in / Register\u201d and select \u201cTeacher / Institute (Seller).\u201d",
+          "Fill in your contact name, institute/brand name, email, phone, and password.",
+          "Click Register.",
+        ] },
+      ] },
+      { heading: "2. Verify Your Email", body: [
+        { type: "p", text: "Click the verification link sent to your inbox, or use \u201cResend email\u201d if needed." },
+      ] },
+      { heading: "3. Set Up How You'll Get Paid", body: [
+        { type: "p", text: "In Seller Studio \u2192 Bank & payouts, add at least one of:" },
+        { type: "ul", items: [
+          "A UPI ID (fastest to set up)",
+          "An uploaded UPI QR code image (from GPay, PhonePe, your bank app)",
+          "Full bank details (account holder name, bank, IFSC, account number)",
+        ] },
+      ] },
+      { heading: "4. Create Your First Test", body: [
+        { type: "p", text: "Click \u201c+ Create test\u201d for the 3-step wizard:" },
+        { type: "ul", items: [
+          "Basics \u2014 title, category, duration (tests auto-submit when time's up), price, description",
+          "Questions \u2014 text, 4 options, correct answer, a topic tag, optional explanation",
+          "Review & Publish \u2014 goes live in the Marketplace immediately",
+        ] },
+      ] },
+      { heading: "5. Bundle Tests Together (optional)", body: [
+        { type: "p", text: "Once you have 2+ published tests, package them at a discount via \u201cBundle tests\u201d in Seller Studio." },
+      ] },
+      { heading: "6. Promote Your Test", body: [
+        { type: "p", text: "Every test/bundle has a share icon \u2014 copy a direct link or share on WhatsApp. The link opens straight to that specific test." },
+      ] },
+      { heading: "7. Track Sales & Withdraw", body: [
+        { type: "p", text: "Seller Studio shows gross sales, your earnings, platform fee, and units sold per listing. Click Withdraw once you have a balance \u2014 automatic if RazorpayX is set up for you, otherwise processed manually by the admin team via your UPI/QR/bank details." },
+      ] },
+      { heading: "Tips for a Strong Listing", body: [
+        { type: "ul", items: [
+          "Tag topics accurately \u2014 it powers the reports buyers actually rely on.",
+          "Tests crossing 10 ratings averaging below 3 stars are automatically hidden \u2014 quality matters.",
+          "A well-priced bundle is often the easiest way to increase what a buyer spends with you.",
+        ] },
+      ] },
+    ],
+  },
+  advertiser: {
+    title: "Advertising on TestMandi", subtitle: "An Advertiser's Guide", pdf: "/advertiser-guide.pdf",
+    sections: [
+      { heading: "1. Register as an Advertiser", body: [
+        { type: "p", text: "Click \u201cLog in / Register,\u201d select \u201cAdvertiser,\u201d and fill in your contact name, business name, email, phone, and password." },
+      ] },
+      { heading: "2. Verify Your Email", body: [
+        { type: "p", text: "Click the link sent to your inbox, or use \u201cResend email\u201d if needed." },
+      ] },
+      { heading: "3. Ad Placement & Pricing", body: [
+        { type: "table", rows: [
+          ["Placement", "Cost", "Where it shows"],
+          ["Homepage", "\u20b9500 / day", "Top of the Marketplace, seen by every visitor"],
+          ["Category page", "\u20b9200 / day", "Top of results for one specific exam category"],
+        ] },
+      ] },
+      { heading: "4. Create an Ad", body: [
+        { type: "ol", items: [
+          "Go to Ads Studio \u2192 \u201c+ Create ad.\u201d",
+          "Fill in a headline (60 chars), ad text (140 chars), placement, and number of days.",
+          "Cost is calculated automatically.",
+          "Click \u201cPay & publish ad.\u201d",
+        ] },
+      ] },
+      { heading: "5. Pay & Go Live", body: [
+        { type: "callout", text: "Pay via UPI, card, or netbanking \u2014 the moment payment succeeds, your ad goes live immediately, with no approval wait." },
+      ] },
+      { heading: "6. Track Your Ads", body: [
+        { type: "p", text: "Ads Studio shows active ads with days remaining, total ads run, and total spend. Once a duration ends, the ad automatically stops and is marked Expired." },
+      ] },
+    ],
+  },
+};
+
+function HelpBlock({ block }) {
+  if (block.type === "p") return <p style={{ fontSize: 13.5, color: T.inkSoft, lineHeight: 1.6, margin: "6px 0" }}>{block.text}</p>;
+  if (block.type === "ul") return (
+    <ul style={{ margin: "8px 0", paddingLeft: 20 }}>
+      {block.items.map((item, i) => <li key={i} style={{ fontSize: 13.5, color: T.inkSoft, lineHeight: 1.6, marginBottom: 4 }}>{item}</li>)}
+    </ul>
+  );
+  if (block.type === "ol") return (
+    <ol style={{ margin: "8px 0", paddingLeft: 20 }}>
+      {block.items.map((item, i) => <li key={i} style={{ fontSize: 13.5, color: T.inkSoft, lineHeight: 1.6, marginBottom: 4 }}>{item}</li>)}
+    </ol>
+  );
+  if (block.type === "callout") return <div className="split-note" style={{ margin: "10px 0" }}>{block.text}</div>;
+  if (block.type === "table") return (
+    <table style={{ width: "100%", borderCollapse: "collapse", margin: "10px 0", fontSize: 13 }}>
+      <tbody>
+        {block.rows.map((row, ri) => (
+          <tr key={ri}>
+            {row.map((cell, ci) => ri === 0 ? (
+              <th key={ci} style={{ textAlign: "left", padding: "8px 12px", borderBottom: `2px solid ${T.saffron}`, fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", color: T.muted }}>{cell}</th>
+            ) : (
+              <td key={ci} style={{ padding: "9px 12px", borderBottom: `1px solid ${T.line}`, color: ci === 1 ? T.ink : T.inkSoft, fontFamily: ci === 1 ? "var(--font-display)" : "inherit", fontSize: ci === 1 ? 15 : 13.5 }}>{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+  return null;
+}
+
+function HelpCenter() {
+  const [active, setActive] = useState("buyer");
+  const guide = HELP_GUIDES[active];
+
+  return (
+    <div style={{ padding: "26px 28px 44px", maxWidth: 760, margin: "0 auto" }}>
+      <SectionLabel eyebrow="Help center" title="Guides for using TestMandi" />
+      <div className="role-toggle" style={{ marginBottom: 22, maxWidth: 460 }}>
+        <button className={`role-toggle-btn ${active === "buyer" ? "active" : ""}`} onClick={() => setActive("buyer")}><User size={14} /> Buyer</button>
+        <button className={`role-toggle-btn ${active === "seller" ? "active" : ""}`} onClick={() => setActive("seller")}><GraduationCap size={14} /> Seller</button>
+        <button className={`role-toggle-btn ${active === "advertiser" ? "active" : ""}`} onClick={() => setActive("advertiser")}><Megaphone size={14} /> Advertiser</button>
+      </div>
+
+      <div className="ticket-card" style={{ marginBottom: 24 }}>
+        <div style={{ padding: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14 }}>
+          <div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: T.saffronDeep, marginBottom: 4 }}>{guide.subtitle}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 24, color: T.ink }}>{guide.title}</div>
+          </div>
+          <a href={guide.pdf} target="_blank" rel="noopener noreferrer" className="btn-outline">
+            <Download size={14} /> Download PDF
+          </a>
+        </div>
+      </div>
+
+      {guide.sections.map((section, i) => (
+        <div key={i} style={{ marginBottom: 26 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, borderBottom: `2px solid ${T.saffron}`, paddingBottom: 6, marginBottom: 8 }}>
+            {section.heading}
+          </div>
+          {section.body.map((block, bi) => <HelpBlock key={bi} block={block} />)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Support chatbot — answers buyer & seller questions                     */
 /* ---------------------------------------------------------------------- */
 function ChatWidget({ session }) {
@@ -3036,6 +3246,7 @@ export default function App() {
     { key: "seller", label: "Seller Studio", icon: GraduationCap },
     { key: "learning", label: "My Learning", icon: BookOpen },
     { key: "ads", label: "Ads Studio", icon: Megaphone },
+    { key: "help", label: "Help", icon: HelpCircle },
     ...(session?.role === "admin" ? [{ key: "admin", label: "Admin", icon: Settings }] : []),
   ];
 
@@ -3327,6 +3538,7 @@ export default function App() {
           onStartAdCheckout={startAdCheckout}
         />
       )}
+      {role === "help" && <HelpCenter />}
       {role === "admin" && session?.role === "admin" && (
         <Admin
           tests={adminData.tests}
