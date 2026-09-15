@@ -113,6 +113,8 @@ export const api = {
   getBundles: () => request("/api/bundles", { auth: false }),
   getMyBundles: () => request("/api/bundles/mine"),
   createBundle: (draft) => request("/api/bundles", { method: "POST", body: draft }),
+  generateQuestions: (payload) => request("/api/seller/generate-questions", { method: "POST", body: payload }),
+  scanQuestions: (imageBase64) => request("/api/seller/scan-questions", { method: "POST", body: { imageBase64 } }),
   deleteBundle: (id) => request(`/api/bundles/${id}`, { method: "DELETE" }),
   getMyBundlePurchases: () => request("/api/bundle-purchases/mine"),
 

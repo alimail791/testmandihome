@@ -139,6 +139,58 @@ const emptyDraftQuestion = () => ({
   text: "", options: ["", "", "", ""], correct: 0, topic: "", explanation: "",
 });
 
+// Parses a simple CSV with columns: question, option1, option2, option3, option4,
+// correct (1-4 or A-D), topic, explanation. Handles quoted fields containing commas.
+function parseQuestionsCSV(csvText) {
+  const parseLine = (line) => {
+    const cells = [];
+    let cur = "", inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { cur += ch; }
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === ",") { cells.push(cur); cur = ""; }
+        else cur += ch;
+      }
+    }
+    cells.push(cur);
+    return cells.map((c) => c.trim());
+  };
+
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return { questions: [], errors: ["The file is empty."] };
+
+  // Skip a header row if the first cell looks like a label, not a question.
+  const firstCells = parseLine(lines[0]);
+  const looksLikeHeader = /^question$/i.test(firstCells[0] || "");
+  const dataLines = looksLikeHeader ? lines.slice(1) : lines;
+
+  const questions = [];
+  const errors = [];
+  dataLines.forEach((line, i) => {
+    const cells = parseLine(line);
+    const [text, o1, o2, o3, o4, correctRaw, topic, explanation] = cells;
+    const rowNum = i + (looksLikeHeader ? 2 : 1);
+    if (!text || !o1 || !o2 || !o3 || !o4) {
+      errors.push(`Row ${rowNum}: missing question text or an option — skipped.`);
+      return;
+    }
+    let correct = 0;
+    const c = (correctRaw || "").trim().toUpperCase();
+    if (["A", "1"].includes(c)) correct = 0;
+    else if (["B", "2"].includes(c)) correct = 1;
+    else if (["C", "3"].includes(c)) correct = 2;
+    else if (["D", "4"].includes(c)) correct = 3;
+    else { errors.push(`Row ${rowNum}: correct answer "${correctRaw}" not recognized (use A/B/C/D or 1/2/3/4) — defaulted to option A.`); }
+    questions.push({ text, options: [o1, o2, o3, o4], correct, topic: topic || "", explanation: explanation || "" });
+  });
+  return { questions, errors };
+}
+
 function isBlockedTest(test) {
   return test.ratingCount > 10 && test.rating < 3;
 }
@@ -1102,6 +1154,75 @@ function CreateTestWizard({ onPublish, onClose, categories }) {
   const [duration, setDuration] = useState(20);
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState([emptyDraftQuestion()]);
+  const [bulkMode, setBulkMode] = useState(null); // null | 'csv' | 'ai' | 'scan'
+  const [csvError, setCsvError] = useState("");
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiCount, setAiCount] = useState(10);
+  const [aiDifficulty, setAiDifficulty] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanError, setScanError] = useState("");
+
+  const appendGenerated = (newQuestions) => {
+    // Replace a single still-empty starter question rather than leaving it dangling.
+    setQuestions((qs) => {
+      const base = qs.length === 1 && !qs[0].text.trim() ? [] : qs;
+      return [...base, ...newQuestions.map((q) => ({ ...emptyDraftQuestion(), ...q }))];
+    });
+    setBulkMode(null);
+  };
+
+  const onCsvFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { questions: parsed, errors } = parseQuestionsCSV(String(reader.result));
+      if (parsed.length === 0) { setCsvError(errors[0] || "No valid questions found in that file."); return; }
+      appendGenerated(parsed);
+      if (errors.length > 0) setCsvError(`Added ${parsed.length} question(s). ${errors.length} row(s) had issues: ${errors.slice(0, 3).join(" ")}`);
+    };
+    reader.onerror = () => setCsvError("Couldn't read that file — please try again.");
+    reader.readAsText(file);
+  };
+
+  const runAiGenerate = async () => {
+    if (!aiTopic.trim()) { setAiError("Enter a topic first."); return; }
+    setAiError("");
+    setAiBusy(true);
+    try {
+      const { questions: generated } = await api.generateQuestions({ topic: aiTopic.trim(), count: aiCount, category, difficulty: aiDifficulty || undefined });
+      appendGenerated(generated);
+    } catch (err) {
+      setAiError(err.message || "Couldn't generate questions — please try again.");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const onScanFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanError("");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { setScanError("Please upload a PNG, JPG, or WEBP image."); return; }
+    if (file.size > 6_000_000) { setScanError("That image is too large — please use a file under 5MB."); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      setScanBusy(true);
+      try {
+        const { questions: scanned } = await api.scanQuestions(String(reader.result));
+        appendGenerated(scanned);
+      } catch (err) {
+        setScanError(err.message || "Couldn't process that image — please try again.");
+      } finally {
+        setScanBusy(false);
+      }
+    };
+    reader.onerror = () => setScanError("Couldn't read that file — please try again.");
+    reader.readAsDataURL(file);
+  };
 
   const updateQuestion = (idx, patch) =>
     setQuestions((qs) => qs.map((qu, i) => (i === idx ? { ...qu, ...patch } : qu)));
@@ -1160,6 +1281,72 @@ function CreateTestWizard({ onPublish, onClose, categories }) {
 
           {step === 1 && (
             <div style={{ display: "grid", gap: 18 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn-outline" onClick={() => setBulkMode(bulkMode === "csv" ? null : "csv")}>
+                  <Package size={14} /> Upload CSV
+                </button>
+                <button className="btn-outline" onClick={() => setBulkMode(bulkMode === "ai" ? null : "ai")}>
+                  <Sparkles size={14} /> Generate with AI
+                </button>
+                <button className="btn-outline" onClick={() => setBulkMode(bulkMode === "scan" ? null : "scan")}>
+                  <Search size={14} /> Scan question paper
+                </button>
+              </div>
+
+              {bulkMode === "csv" && (
+                <div className="split-panel">
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: T.ink, marginBottom: 6 }}>Upload a CSV of questions</div>
+                  <div className="split-note" style={{ marginBottom: 10 }}>
+                    Columns, in order: <code>question, option1, option2, option3, option4, correct (A/B/C/D or 1-4), topic, explanation</code>.
+                    A header row is optional — if the first cell says "question," it's skipped automatically.
+                  </div>
+                  <input type="file" accept=".csv,text/csv" className="field-input" onChange={onCsvFile} />
+                  {csvError && <div style={{ color: T.red, fontSize: 12.5, marginTop: 8 }}>{csvError}</div>}
+                </div>
+              )}
+
+              {bulkMode === "ai" && (
+                <div className="split-panel">
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: T.ink, marginBottom: 10 }}>Generate questions with AI</div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <label className="field-label">Topic
+                      <input className="field-input" value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="e.g. Genetics and Evolution" disabled={aiBusy} />
+                    </label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <label className="field-label">Number of questions
+                        <input type="number" min={1} max={30} className="field-input" value={aiCount} onChange={(e) => setAiCount(Number(e.target.value))} disabled={aiBusy} />
+                      </label>
+                      <label className="field-label">Difficulty (optional)
+                        <select className="field-input" value={aiDifficulty} onChange={(e) => setAiDifficulty(e.target.value)} disabled={aiBusy}>
+                          <option value="">Any</option>
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                      </label>
+                    </div>
+                    {aiError && <div style={{ color: T.red, fontSize: 12.5 }}>{aiError}</div>}
+                    <button className="btn-primary" style={{ justifySelf: "start", opacity: aiBusy ? 0.6 : 1 }} disabled={aiBusy} onClick={runAiGenerate}>
+                      {aiBusy ? <><Loader2 size={14} className="spin" /> Generating…</> : <><Sparkles size={14} /> Generate</>}
+                    </button>
+                    <div style={{ fontSize: 12, color: T.muted }}>Review every generated question carefully before publishing — you're responsible for accuracy.</div>
+                  </div>
+                </div>
+              )}
+
+              {bulkMode === "scan" && (
+                <div className="split-panel">
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: T.ink, marginBottom: 10 }}>Scan a question paper</div>
+                  <div className="split-note" style={{ marginBottom: 10 }}>
+                    Upload a clear photo or scan of a printed question paper — the AI will read it and extract multiple-choice questions automatically.
+                  </div>
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="field-input" onChange={onScanFile} disabled={scanBusy} />
+                  {scanBusy && <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, color: T.muted, fontSize: 13 }}><Loader2 size={14} className="spin" /> Reading the image…</div>}
+                  {scanError && <div style={{ color: T.red, fontSize: 12.5, marginTop: 8 }}>{scanError}</div>}
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 8 }}>Review every extracted question carefully before publishing — you're responsible for accuracy.</div>
+                </div>
+              )}
+
               {questions.map((qu, idx) => (
                 <div key={idx} className="question-editor">
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -2733,6 +2920,13 @@ const HELP_GUIDES = {
           "Questions \u2014 text, 4 options, correct answer, a topic tag, optional explanation",
           "Review & Publish \u2014 goes live in the Marketplace immediately",
         ] },
+        { type: "p", text: "Three shortcuts for adding questions faster, right on the Questions step:" },
+        { type: "ul", items: [
+          "Upload CSV \u2014 export questions from a spreadsheet as question, option1-4, correct (A-D/1-4), topic, explanation and upload the whole file at once",
+          "Generate with AI \u2014 type a topic and a count, and the platform writes a full set of questions for you in seconds",
+          "Scan question paper \u2014 upload a photo of a printed question paper and the AI extracts the questions automatically",
+        ] },
+        { type: "callout", text: "However you add them, review every question carefully before publishing \u2014 you're responsible for their accuracy, especially anything generated or scanned." },
       ] },
       { heading: "5. Bundle Tests Together (optional)", body: [
         { type: "p", text: "Once you have 2+ published tests, package them at a discount via \u201cBundle tests\u201d in Seller Studio." },
