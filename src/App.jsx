@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { api } from "./api.js";
 import {
   Star, ShoppingCart, Plus, Clock, Users, TrendingUp, CheckCircle2, XCircle,
@@ -873,6 +874,8 @@ function BundleWizard({ myTests, onClose, onPublish }) {
 function ShareMenu({ test, variant }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef(null);
 
   const shareUrl = `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}?test=${test.id}`;
   const shareText = variant === "seller"
@@ -891,23 +894,49 @@ function ShareMenu({ test, variant }) {
     window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank");
   };
 
+  const openMenu = () => {
+    // Position the portal-rendered dropdown against the trigger button's real
+    // screen coordinates — this is what lets it escape a parent card's
+    // overflow:hidden (used elsewhere for rounding corners around images)
+    // instead of being visually clipped by it.
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setMenuPos({ top: rect.bottom + 6, left: Math.max(8, rect.right - 168) });
+    setOpen((o) => !o);
+  };
+
+  // Keep the dropdown correctly positioned if the page scrolls while it's open.
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect) setMenuPos({ top: rect.bottom + 6, left: Math.max(8, rect.right - 168) });
+    };
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [open]);
+
   return (
     <div style={{ position: "relative" }}>
-      <button className="icon-btn share-trigger" onClick={() => setOpen((o) => !o)} title={variant === "seller" ? "Promote this test" : "Share with friends"}>
+      <button ref={triggerRef} className="icon-btn share-trigger" onClick={openMenu} title={variant === "seller" ? "Promote this test" : "Share with friends"}>
         <Share2 size={15} />
       </button>
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <>
           <div className="share-backdrop" onClick={() => setOpen(false)} />
-          <div className="share-menu">
-            <button className="share-menu-item" onClick={copyLink}>
+          <div className="share-menu" style={{ position: "fixed", top: menuPos.top, left: menuPos.left }}>
+            <button className="share-menu-item" onClick={() => { copyLink(); }}>
               {copied ? <Check size={14} color={T.green} /> : <Copy size={14} />} {copied ? "Link copied!" : "Copy link"}
             </button>
-            <button className="share-menu-item" onClick={shareWhatsApp}>
+            <button className="share-menu-item" onClick={() => { shareWhatsApp(); setOpen(false); }}>
               <MessageCircle size={14} /> Share on WhatsApp
             </button>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
@@ -3573,7 +3602,7 @@ export default function App() {
         .chat-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid ${T.line}; background: #fff; }
 
         .share-backdrop { position: fixed; inset: 0; z-index: 55; }
-        .share-menu { position: absolute; top: calc(100% + 6px); right: 0; background: #fff; border: 1px solid ${T.line}; border-radius: 8px; box-shadow: 0 8px 22px rgba(27,42,74,0.18); z-index: 56; overflow: hidden; min-width: 168px; }
+        .share-menu { background: #fff; border: 1px solid ${T.line}; border-radius: 8px; box-shadow: 0 8px 22px rgba(27,42,74,0.18); z-index: 200; overflow: hidden; min-width: 168px; }
         .share-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 13px; background: #fff; border: none; font-size: 12.5px; color: ${T.ink}; text-align: left; }
         .share-menu-item:hover { background: ${T.paperAlt}; }
         .share-menu-item + .share-menu-item { border-top: 1px solid ${T.line}; }
