@@ -2237,9 +2237,9 @@ function ReferralPanel({ me }) {
       </div>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
-        <div className="referral-code-box">{referralCode}</div>
-        <button className="btn-outline" onClick={copyLink}>{copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}</button>
-        <button className="btn-outline" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank")}>
+        <div className="referral-code-box">{referralCode || "Loading…"}</div>
+        <button className="btn-outline" disabled={!referralCode} onClick={copyLink}>{copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}</button>
+        <button className="btn-outline" disabled={!referralCode} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank")}>
           <MessageCircle size={14} /> Share on WhatsApp
         </button>
       </div>
@@ -2291,9 +2291,9 @@ function SellerReferralPanel({ me }) {
       </div>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
-        <div className="referral-code-box">{referralCode}</div>
-        <button className="btn-outline" onClick={copyLink}>{copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}</button>
-        <button className="btn-outline" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank")}>
+        <div className="referral-code-box">{referralCode || "Loading…"}</div>
+        <button className="btn-outline" disabled={!referralCode} onClick={copyLink}>{copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}</button>
+        <button className="btn-outline" disabled={!referralCode} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank")}>
           <MessageCircle size={14} /> Share on WhatsApp
         </button>
       </div>
