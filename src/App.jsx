@@ -515,6 +515,12 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
               <span>Refer friends after you sign up — once someone you refer buys their first test, you get <strong>50% off</strong> your next purchase.</span>
             </div>
           )}
+          {!isAdmin && mode === "register" && accType === "seller" && (
+            <div className="referral-promo">
+              <Gift size={15} color={T.saffronDeep} style={{ flexShrink: 0 }} />
+              <span>TestMandi's seller referral program: refer another seller and earn <strong>₹200</strong> once they publish their first test, or refer a student and earn <strong>₹200</strong> once they make their first purchase — paid straight to your seller balance.</span>
+            </div>
+          )}
 
           <div style={{ display: "grid", gap: 12, marginTop: isAdmin ? 0 : 16 }}>
             {mode === "register" && (
@@ -538,9 +544,9 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
             <label className="field-label">Password
               <input className="field-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </label>
-            {mode === "register" && accType === "buyer" && (
+            {mode === "register" && (accType === "buyer" || accType === "seller") && (
               <label className="field-label">Referral code (optional)
-                <input className="field-input" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder="Got a code from a friend? Enter it here" />
+                <input className="field-input" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder={accType === "seller" ? "Referred by another seller? Enter their code" : "Got a code from a friend? Enter it here"} />
               </label>
             )}
           </div>
@@ -1682,7 +1688,7 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
     return { bundle: b, units: b.unitsSold, gross: b.gross, earn, fee: b.gross - earn };
   });
   const totals = [...rows, ...bundleRows].reduce((a, r) => ({ gross: a.gross + r.gross, earn: a.earn + r.earn, fee: a.fee + r.fee, units: a.units + r.units }), { gross: 0, earn: 0, fee: 0, units: 0 });
-  const available = Math.max(0, totals.earn - payouts.withdrawn);
+  const available = Math.max(0, totals.earn + (payouts.referralBonusTotal || 0) - payouts.withdrawn);
 
   return (
     <div style={{ padding: "26px 28px 40px" }}>
@@ -1713,6 +1719,10 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
         payoutHistory={payouts.history}
         onWithdraw={onWithdraw}
       />
+
+      <div style={{ marginTop: 20 }}>
+        <SellerReferralPanel me={session} />
+      </div>
 
       <div style={{ marginTop: 30 }}>
         <SectionLabel eyebrow="Catalogue" title="Your tests" />
@@ -2244,6 +2254,70 @@ function ReferralPanel({ me }) {
     </div>
   );
 }
+
+function SellerReferralPanel({ me }) {
+  const [copied, setCopied] = useState(false);
+  const [data, setData] = useState({ referralCode: me.referralCode, referredCount: 0, bonusTotal: 0, history: [] });
+
+  useEffect(() => {
+    api.getMyReferrals().then(setData).catch(() => {});
+  }, [me.email]);
+
+  const referralCode = data.referralCode || me.referralCode;
+  const shareUrl = `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}?ref=${referralCode}`;
+  const shareText = `Sell your MCQ tests on TestMandi! Use my code ${referralCode} when you register as a seller, or refer a student to buy their first test: ${shareUrl}`;
+
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); } catch (e) { /* clipboard unavailable */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="referral-panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, display: "flex", alignItems: "center", gap: 8 }}>
+            <Gift size={17} color={T.saffronDeep} /> Refer & earn
+          </div>
+          <div style={{ fontSize: 12.5, color: T.muted, marginTop: 2 }}>
+            Refer another seller — earn ₹200 when they publish their first test. Refer a student — earn ₹200 on their first purchase. Both go straight to your payout balance.
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div className="stub-label">Total earned from referrals</div>
+          <div className="stub-value" style={{ color: T.green }}>₹{(data.bonusTotal || 0).toLocaleString("en-IN")}</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+        <div className="referral-code-box">{referralCode}</div>
+        <button className="btn-outline" onClick={copyLink}>{copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}</button>
+        <button className="btn-outline" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank")}>
+          <MessageCircle size={14} /> Share on WhatsApp
+        </button>
+      </div>
+
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 8 }}>{data.referredCount || 0} account{data.referredCount === 1 ? "" : "s"} registered with your code</div>
+
+      {(data.history || []).length > 0 ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          {data.history.slice(0, 5).map((h) => (
+            <div key={h.id} className="ledger-row" style={{ padding: "8px 12px" }}>
+              <div style={{ fontSize: 12.5, color: T.ink }}>
+                {h.type === "seller_joined" ? `${h.fromName} published their first test` : `${h.fromName} made their first purchase`}
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, color: T.green }}>+₹{h.amount}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, color: T.muted }}>No referral bonuses yet — they'll show up here once someone you refer takes their first qualifying action.</div>
+      )}
+    </div>
+  );
+}
+
 
 function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin }) {
   const myTests = tests.filter((t) => purchasedIds.has(t.id));
