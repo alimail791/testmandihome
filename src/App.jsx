@@ -226,11 +226,7 @@ function Stars({ value, size = 14 }) {
 
 function BrandMark({ size = 32 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1.5" y="1.5" width="37" height="37" rx="9" fill={T.ink} stroke={T.saffron} strokeWidth="1.4" />
-      <circle cx="20" cy="20" r="14" fill="none" stroke={T.saffron} strokeWidth="1" strokeDasharray="1.6 2.4" opacity="0.7" />
-      <text x="20" y="26" textAnchor="middle" fontFamily="Zilla Slab, Georgia, serif" fontWeight="700" fontSize="15" fill={T.saffron}>TM</text>
-    </svg>
+    <img src="/logo.png" alt="TestMandi" width={size} height={size} style={{ display: "block", borderRadius: size * 0.22 }} />
   );
 }
 
