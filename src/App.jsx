@@ -3292,6 +3292,46 @@ export default function App() {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("test") || "";
   });
+
+  // SEO: this is a client-rendered app, so search engines only see whatever
+  // document.title/meta description are set to at the moment they render the
+  // page — there's no per-route server-rendered HTML. Updating these on every
+  // view change is the best available signal within that constraint, and
+  // matters a lot for how shared links preview on WhatsApp/social media too.
+  useEffect(() => {
+    const setMeta = (name, content, isProperty = false) => {
+      const attr = isProperty ? "property" : "name";
+      let tag = document.querySelector(`meta[${attr}="${name}"]`);
+      if (!tag) { tag = document.createElement("meta"); tag.setAttribute(attr, name); document.head.appendChild(tag); }
+      tag.setAttribute("content", content);
+    };
+
+    const sharedTest = sharedItemId ? tests.find((t) => t.id === sharedItemId) : null;
+    const sharedBundle = !sharedTest && sharedItemId ? bundles.find((b) => b.id === sharedItemId) : null;
+    const sharedItem = sharedTest || sharedBundle;
+
+    let title = "TestMandi — Buy & Sell MCQ Practice Tests for NEET, JEE, UPSC, SSC & More";
+    let description = "TestMandi is India's marketplace for exam-prep MCQ tests. Buy practice tests for NEET, JEE Main, UPSC, SSC, Banking, GATE, and 30+ competitive exams — or sell your own tests as a teacher or institute.";
+    let noindex = false;
+
+    if (sharedItem) {
+      title = `${sharedItem.title} — ₹${sharedItem.price} | TestMandi`;
+      description = (sharedItem.description || `Practice test on TestMandi with ${sharedItem.questions?.length || sharedTest ? sharedItem.questions.length : ""} questions.`).slice(0, 160);
+    } else if (role === "seller") { title = "Seller Studio — TestMandi"; description = "Create and sell MCQ practice tests on TestMandi."; }
+    else if (role === "learning") { title = "My Learning — TestMandi"; noindex = true; }
+    else if (role === "ads") { title = "Ads Studio — TestMandi"; description = "Advertise on TestMandi's exam-prep marketplace."; }
+    else if (role === "help") { title = "Help Center — TestMandi"; description = "Guides for buyers, sellers, and advertisers on TestMandi."; }
+    else if (role === "admin") { title = "Admin — TestMandi"; noindex = true; }
+
+    document.title = title;
+    setMeta("description", description);
+    setMeta("og:title", title, true);
+    setMeta("og:description", description, true);
+    setMeta("twitter:title", title);
+    setMeta("twitter:description", description);
+    setMeta("robots", noindex ? "noindex, nofollow" : "index, follow");
+  }, [role, sharedItemId, tests, bundles]);
+
   const [authAction, setAuthAction] = useState(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
