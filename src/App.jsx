@@ -3040,6 +3040,14 @@ const HELP_GUIDES = {
       { heading: "7. Track Sales & Withdraw", body: [
         { type: "p", text: "Seller Studio shows gross sales, your earnings, platform fee, and units sold per listing. Click Withdraw once you have a balance \u2014 automatic if RazorpayX is set up for you, otherwise processed manually by the admin team via your UPI/QR/bank details." },
       ] },
+      { heading: "8. Refer & Earn \u2014 a Second Income Stream", body: [
+        { type: "p", text: "Every seller gets a personal referral code, shown in the \u201cRefer & earn\u201d panel in Seller Studio, just below Bank & Payouts. You earn a flat \u20b9200 cash bonus, credited straight to your payout balance, two ways:" },
+        { type: "ul", items: [
+          "Refer another seller \u2014 earn \u20b9200 the moment they publish their first test",
+          "Refer a student or buyer \u2014 earn \u20b9200 the moment they complete their first purchase",
+        ] },
+        { type: "callout", text: "Referral bonuses sit on top of your normal sales earnings \u2014 they're not reduced by the platform's profit-split percentage, since they're funded entirely by TestMandi." },
+      ] },
       { heading: "Tips for a Strong Listing", body: [
         { type: "ul", items: [
           "Tag topics accurately \u2014 it powers the reports buyers actually rely on.",

@@ -105,6 +105,17 @@ Back in Seller Studio, you'll see:
 3. If your account has real bank-transfer payouts enabled, this happens automatically.
 4. Otherwise, your request goes to the TestMandi admin team for manual processing (via your UPI/QR/bank details) — you'll see the status update from *Pending* to *Completed* once paid.
 
+## 9. Refer & Earn — a Second Income Stream
+
+Every seller gets a personal referral code, shown in the **"Refer & earn"** panel in Seller Studio (just below Bank & Payouts). You earn a flat **₹200 cash bonus**, credited straight to your payout balance, in two ways:
+
+- **Refer another seller** — you earn ₹200 the moment they publish their **first** test.
+- **Refer a student or buyer** — you earn ₹200 the moment they complete their **first** purchase.
+
+To share your code, use the **Copy invite link** or **Share on WhatsApp** buttons in the panel. Every account that registers using your code counts toward your referral total, and each bonus you earn shows up in a running history with who triggered it.
+
+Referral bonuses are **on top of your normal sales earnings** — they're not reduced by the platform's profit-split percentage, since they're funded entirely by TestMandi as a thank-you for helping the marketplace grow.
+
 ---
 
 ### Tips for a Strong Listing
