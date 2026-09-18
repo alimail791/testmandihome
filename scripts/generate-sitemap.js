@@ -1,46 +1,50 @@
 // scripts/generate-sitemap.js
-// Run this before every build to create an up-to-date public/sitemap.xml
+// Run this before every build to create an up-to-date public/sitemap.xml.
+//
+// Pulls from the real, existing GET /api/tests endpoint — there is no
+// /tests/all-slugs or /sellers/all-slugs endpoint on the backend, and no
+// public seller profile pages exist in the app, so neither is referenced
+// here. URLs match the real routing added to the frontend: /tests/:id/:slug
+// (the id drives the lookup; the slug is a decorative, keyword-rich suffix).
 
 import fs from 'fs';
 
 const API_BASE = process.env.VITE_API_BASE || 'https://testmandiserver-production.up.railway.app';
 const SITE_URL = 'https://testmandi.in';
 
+// Mirrors the frontend's slugify() in testmandi.jsx — keep these two in sync
+// if that function ever changes, since a sitemap URL that doesn't match what
+// the app itself generates is just a broken link waiting to happen.
+function slugify(title) {
+  return (title || 'test')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'test';
+}
+
 async function generateSitemap() {
-  let testSlugs = [];
-  let sellerSlugs = [];
+  let tests = [];
 
   try {
-    const testsRes = await fetch(`${API_BASE}/tests/all-slugs`);
-    testSlugs = testsRes.ok ? await testsRes.json() : [];
+    const res = await fetch(`${API_BASE}/api/tests`);
+    const data = res.ok ? await res.json() : { tests: [] };
+    tests = data.tests || [];
   } catch (err) {
-    console.error('Could not fetch test slugs:', err.message);
-  }
-
-  try {
-    const sellersRes = await fetch(`${API_BASE}/sellers/all-slugs`);
-    sellerSlugs = sellersRes.ok ? await sellersRes.json() : [];
-  } catch (err) {
-    console.error('Could not fetch seller slugs:', err.message);
+    console.error('Could not fetch tests for sitemap:', err.message);
   }
 
   const staticUrls = [
     { loc: `${SITE_URL}/`, priority: '1.0' },
   ];
 
-  const testUrls = testSlugs.map((t) => ({
-    loc: `${SITE_URL}/tests/${t.slug}`,
-    lastmod: t.updatedAt ? new Date(t.updatedAt).toISOString().split('T')[0] : undefined,
+  const testUrls = tests.map((t) => ({
+    loc: `${SITE_URL}/tests/${t.id}/${slugify(t.title)}`,
+    lastmod: t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : undefined,
     priority: '0.8',
   }));
 
-  const sellerUrls = sellerSlugs.map((s) => ({
-    loc: `${SITE_URL}/sellers/${s.slug}`,
-    lastmod: s.updatedAt ? new Date(s.updatedAt).toISOString().split('T')[0] : undefined,
-    priority: '0.6',
-  }));
-
-  const allUrls = [...staticUrls, ...testUrls, ...sellerUrls];
+  const allUrls = [...staticUrls, ...testUrls];
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -56,7 +60,7 @@ ${u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>\n` : ''}    <priority>${u.pri
 `;
 
   fs.writeFileSync('public/sitemap.xml', xml);
-  console.log(`Sitemap written with ${allUrls.length} URLs.`);
+  console.log(`Sitemap written with ${allUrls.length} URLs (${testUrls.length} tests).`);
 }
 
 generateSitemap();

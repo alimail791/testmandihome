@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { api } from "./api.js";
 import {
   Star, ShoppingCart, Plus, Clock, Users, TrendingUp, CheckCircle2, XCircle,
@@ -139,6 +140,18 @@ function seedPurchases() {
 const emptyDraftQuestion = () => ({
   text: "", options: ["", "", "", ""], correct: 0, topic: "", explanation: "",
 });
+
+// Turns a test/bundle title into a URL-friendly slug for the /tests/:id/:slug
+// route. The slug is purely decorative for readability and keyword relevance
+// — the id is what actually drives the lookup, so a stale/mismatched slug
+// (e.g. an old shared link after a title edit) never breaks the link.
+function slugify(title) {
+  return (title || "test")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "test";
+}
 
 // Parses a simple CSV with columns: question, option1, option2, option3, option4,
 // correct (1-4 or A-D), topic, explanation. Handles quoted fields containing commas.
@@ -879,7 +892,7 @@ function ShareMenu({ test, variant }) {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
 
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}?test=${test.id}`;
+  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/tests/${test.id}/${slugify(test.title)}`;
   const shareText = variant === "seller"
     ? `I just listed "${test.title}" on TestMandi — ${test.questions.length} questions, ₹${test.price}. Try it here: ${shareUrl}`
     : `Try this "${test.title}" MCQ test on TestMandi and see how you score: ${shareUrl}`;
@@ -3232,7 +3245,7 @@ function requiredRoleForCheckoutKind(kind) {
 /* ---------------------------------------------------------------------- */
 /* App shell                                                              */
 /* ---------------------------------------------------------------------- */
-export default function App() {
+function AppShell({ routeTestId }) {
   const [role, setRole] = useState("marketplace");
   const [tests, setTests] = useState(seedTests());
   const [bundles, setBundles] = useState([]);
@@ -3285,6 +3298,10 @@ export default function App() {
     return new URLSearchParams(window.location.search).get("ref") || "";
   });
   const [sharedItemId] = useState(() => {
+    // Real route (/tests/:id/:slug) takes priority — this is how every new
+    // shared link works. The old ?test= query string is kept as a fallback
+    // so links shared before this change don't break.
+    if (routeTestId) return routeTestId;
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("test") || "";
   });
@@ -3326,6 +3343,18 @@ export default function App() {
     setMeta("twitter:title", title);
     setMeta("twitter:description", description);
     setMeta("robots", noindex ? "noindex, nofollow" : "index, follow");
+
+    // Canonical must point at THIS page's own real URL when it's a specific
+    // test — pointing every page at the bare homepage (the old behavior)
+    // told Google every test link was just a duplicate of the homepage,
+    // which is exactly what was suppressing them from being indexed on
+    // their own.
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://testmandi.in";
+    const canonicalUrl = sharedItem ? `${origin}/tests/${sharedItem.id}/${slugify(sharedItem.title)}` : `${origin}/`;
+    let canonicalTag = document.querySelector('link[rel="canonical"]');
+    if (!canonicalTag) { canonicalTag = document.createElement("link"); canonicalTag.setAttribute("rel", "canonical"); document.head.appendChild(canonicalTag); }
+    canonicalTag.setAttribute("href", canonicalUrl);
+    setMeta("og:url", canonicalUrl, true);
   }, [role, sharedItemId, tests, bundles]);
 
   const [authAction, setAuthAction] = useState(() => {
@@ -3935,5 +3964,27 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+// Renders AppShell for the /tests/:id/:slug route, feeding it the real id
+// from the URL path. The slug segment isn't read here — it's purely for
+// SEO/readability in the URL bar and shared links; the id alone drives the
+// actual lookup, so an old link still works even after a test's title (and
+// therefore its slug) changes later.
+function TestRoute() {
+  const { id } = useParams();
+  return <AppShell routeTestId={id} />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/tests/:id" element={<TestRoute />} />
+        <Route path="/tests/:id/:slug" element={<TestRoute />} />
+        <Route path="*" element={<AppShell />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
