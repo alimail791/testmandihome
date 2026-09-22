@@ -9,7 +9,7 @@ import {
   LogIn, LogOut, User, Landmark, ShieldCheck, CreditCard, Smartphone,
   Building2, ArrowDownToLine, Loader2, Lock, MessageCircle, Send, Bot,
   Share2, Copy, Bell, Gift, Timer, Megaphone, Check, Sparkles, ShieldOff, Package,
-  HelpCircle, Download,
+  HelpCircle, Download, BarChart3, Heart, Tag,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -207,6 +207,20 @@ function parseQuestionsCSV(csvText) {
 
 function isBlockedTest(test) {
   return test.ratingCount > 10 && test.rating < 3;
+}
+
+// upcoming: before scheduledStart. live: within the join window, buyers can
+// start it now. closed: join window has passed — only a leaderboard remains.
+function getLiveTestStatus(scheduled) {
+  const now = Date.now();
+  const joinDeadline = scheduled.scheduledStart + (scheduled.joinWindowMinutes || 30) * 60 * 1000;
+  if (now < scheduled.scheduledStart) return "upcoming";
+  if (now <= joinDeadline) return "live";
+  return "closed";
+}
+
+function formatScheduledTime(ms) {
+  return new Date(ms).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function seedNotifications() {
@@ -669,6 +683,7 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
   const [applyReward, setApplyReward] = useState(false);
   const [hasReward, setHasReward] = useState(false);
   const [resultRecord, setResultRecord] = useState(null);
+  const [couponCode, setCouponCode] = useState("");
   const payerLabel = kind === "ad" ? "Advertiser" : "Buyer";
 
   useEffect(() => {
@@ -682,7 +697,7 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
     setPhase("processing");
     setErrorMsg("");
     try {
-      const order = await api.createOrder({ kind, itemId, adDraft, applyReward });
+      const order = await api.createOrder({ kind, itemId, adDraft, applyReward, couponCode: couponCode.trim() || undefined });
 
       if (order.free) {
         // Backend already completed this at zero cost — nothing to pay for.
@@ -780,6 +795,12 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
               <input type="checkbox" checked={applyReward} onChange={(e) => setApplyReward(e.target.checked)} />
               <Gift size={14} color={T.saffronDeep} />
               <span>Apply your referral reward — <strong>50% off</strong> this purchase</span>
+            </label>
+          )}
+
+          {(kind === "test" || kind === "bundle") && (phase === "form" || phase === "error") && (
+            <label className="field-label" style={{ marginTop: 10, marginBottom: 4 }}>Coupon code (optional)
+              <input className="field-input" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="e.g. WELCOME10" />
             </label>
           )}
 
@@ -960,17 +981,24 @@ function ShareMenu({ test, variant }) {
 /* ---------------------------------------------------------------------- */
 /* Marketplace                                                            */
 /* ---------------------------------------------------------------------- */
-function TestCard({ test, purchased, onBuy, onOpenLearning }) {
+function TestCard({ test, purchased, onBuy, onOpenLearning, wishlisted, onToggleWishlist }) {
   return (
     <div className="ticket-card">
       <div style={{ padding: "16px 18px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <Stamp>{test.category}</Stamp>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <Stars value={test.rating} />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: T.muted }}>
-              {test.rating.toFixed(1)} ({test.ratingCount})
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <Stars value={test.rating} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: T.muted }}>
+                {test.rating.toFixed(1)} ({test.ratingCount})
+              </span>
+            </div>
+            {onToggleWishlist && (
+              <button className="icon-btn" title={wishlisted ? "Remove from wishlist" : "Save for later"} onClick={onToggleWishlist} style={{ padding: 4 }}>
+                <Heart size={16} color={T.saffronDeep} fill={wishlisted ? T.saffronDeep : "none"} />
+              </button>
+            )}
           </div>
         </div>
         <h3 style={{ fontFamily: "var(--font-display)", fontSize: 19, color: T.ink, margin: "10px 0 6px", lineHeight: 1.25 }}>
@@ -1058,7 +1086,105 @@ function AdBanner({ ad }) {
   );
 }
 
-function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId }) {
+function LiveTestsSection({ scheduledTests, purchasedIds, onJoinLive, onBuy, onViewLeaderboard }) {
+  if (!scheduledTests || scheduledTests.length === 0) return null;
+
+  // Live sessions first (most actionable), then upcoming, then recently closed
+  // ones (still worth a leaderboard link) — sorted soonest-first within each group.
+  const order = { live: 0, upcoming: 1, closed: 2 };
+  const sorted = scheduledTests
+    .map((s) => ({ ...s, status: getLiveTestStatus(s) }))
+    .sort((a, b) => order[a.status] - order[b.status] || a.scheduledStart - b.scheduledStart);
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Users size={15} color={T.saffronDeep} />
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: T.saffronDeep }}>
+          Live tests
+        </span>
+      </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        {sorted.map((s) => {
+          const owned = purchasedIds.has(s.testId);
+          return (
+            <div key={s.id} className="ledger-row" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase",
+                  padding: "4px 10px", borderRadius: 999, flexShrink: 0,
+                  background: s.status === "live" ? T.green : s.status === "upcoming" ? T.saffronDeep : T.line,
+                  color: s.status === "closed" ? T.muted : "#fff",
+                }}
+              >
+                {s.status === "live" ? "Live now" : s.status === "upcoming" ? "Upcoming" : "Closed"}
+              </div>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontSize: 14.5, color: T.ink, fontWeight: 600 }}>{s.test.title}</div>
+                <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>
+                  {s.test.sellerName} · {formatScheduledTime(s.scheduledStart)}
+                </div>
+              </div>
+              {s.status === "live" && owned && (
+                <button className="btn-primary" onClick={() => onJoinLive(s.id, s.testId)}><Play size={14} /> Join live test</button>
+              )}
+              {s.status === "live" && !owned && (
+                <button className="btn-outline" onClick={() => onBuy(s.test)}>Buy to join · ₹{s.test.price}</button>
+              )}
+              {s.status === "upcoming" && (
+                <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>Starts {formatScheduledTime(s.scheduledStart)}</div>
+              )}
+              {s.status === "closed" && (
+                <button className="btn-outline" onClick={() => onViewLeaderboard(s.id)}>View leaderboard</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PassesSection({ passes, myGrants, onBuyPass }) {
+  if (!passes || passes.length === 0) return null;
+  const grantBySeller = Object.fromEntries((myGrants || []).map((g) => [g.sellerEmail, g]));
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Package size={15} color={T.saffronDeep} />
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: T.saffronDeep }}>
+          All-access passes
+        </span>
+      </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        {passes.map((p) => {
+          const grant = grantBySeller[p.sellerEmail];
+          const hasAccess = grant && grant.expiresAt > Date.now();
+          return (
+            <div key={p.id} className="ledger-row" style={{ padding: "14px 18px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14.5, color: T.ink, fontWeight: 600 }}>{p.sellerName}</div>
+                <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>
+                  ₹{p.price} for {p.durationDays} days · unlocks every test from this seller
+                </div>
+              </div>
+              {hasAccess ? (
+                <div style={{ fontSize: 12.5, color: T.green, fontFamily: "var(--font-mono)" }}>
+                  Active until {new Date(grant.expiresAt).toLocaleDateString("en-IN")}
+                </div>
+              ) : (
+                <button className="btn-primary" onClick={() => onBuyPass(p)}>Get this pass</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId, scheduledTests, onJoinLive, onViewLeaderboard, allAccessPasses, myAccessGrants, onBuyPass, wishlistIds, onToggleWishlist }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState("rating");
@@ -1127,6 +1253,8 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
           </div>
         )}
         {homepageAd && <AdBanner ad={homepageAd} />}
+        <LiveTestsSection scheduledTests={scheduledTests} purchasedIds={purchasedIds} onJoinLive={onJoinLive} onBuy={onBuy} onViewLeaderboard={onViewLeaderboard} />
+        <PassesSection passes={allAccessPasses} myGrants={myAccessGrants} onBuyPass={onBuyPass} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
           <div className="search-box">
             <Search size={15} color={T.muted} />
@@ -1156,6 +1284,8 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
               purchased={purchasedIds.has(t.id)}
               onBuy={() => onBuy(t)}
               onOpenLearning={goLearning}
+              wishlisted={wishlistIds?.has(t.id)}
+              onToggleWishlist={onToggleWishlist ? () => onToggleWishlist(t.id, wishlistIds?.has(t.id)) : undefined}
             />
           ))}
           {filtered.length === 0 && (
@@ -1655,9 +1785,279 @@ function PayoutPanel({ sellerKey, available, bankDetails, payoutsReady, onSaveBa
   );
 }
 
-function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle }) {
+function LiveTestManager({ myTests, scheduledTests, sellerEmail, onScheduleTest, onViewLeaderboard }) {
+  const [testId, setTestId] = useState(myTests[0]?.id || "");
+  const [when, setWhen] = useState("");
+  const [joinWindow, setJoinWindow] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const mine = (scheduledTests || [])
+    .filter((s) => s.sellerEmail === sellerEmail)
+    .map((s) => ({ ...s, status: getLiveTestStatus(s) }))
+    .sort((a, b) => b.scheduledStart - a.scheduledStart);
+
+  const schedule = async () => {
+    setError(""); setSuccess(false);
+    if (!testId) { setError("Pick a test first."); return; }
+    if (!when) { setError("Pick a start date and time."); return; }
+    const start = new Date(when).getTime();
+    if (!Number.isFinite(start) || start <= Date.now()) { setError("Start time must be in the future."); return; }
+    setBusy(true);
+    try {
+      await onScheduleTest({ testId, scheduledStart: start, joinWindowMinutes: Number(joinWindow) || 30 });
+      setSuccess(true);
+      setWhen("");
+    } catch (err) {
+      setError(err.message || "Couldn't schedule this live test.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="referral-panel">
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <Users size={17} color={T.saffronDeep} /> Live tests
+      </div>
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 14 }}>
+        Schedule one of your existing tests as a live event — everyone who joins during the window competes for the same leaderboard.
+      </div>
+
+      {myTests.length === 0 ? (
+        <div style={{ fontSize: 13, color: T.muted }}>Publish a test first, then come back here to schedule a live session for it.</div>
+      ) : (
+        <div style={{ display: "grid", gap: 10, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr auto", gap: 10, alignItems: "end" }}>
+            <label className="field-label">Test
+              <select className="field-input" value={testId} onChange={(e) => setTestId(e.target.value)} disabled={busy}>
+                {myTests.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </label>
+            <label className="field-label">Start date & time
+              <input type="datetime-local" className="field-input" value={when} onChange={(e) => setWhen(e.target.value)} disabled={busy} />
+            </label>
+            <label className="field-label">Join window (min)
+              <input type="number" min={5} max={180} className="field-input" value={joinWindow} onChange={(e) => setJoinWindow(e.target.value)} disabled={busy} />
+            </label>
+            <button className="btn-primary" onClick={schedule} disabled={busy}>
+              {busy ? <Loader2 size={14} className="spin" /> : <Users size={14} />} Schedule
+            </button>
+          </div>
+          {error && <div style={{ color: T.red, fontSize: 12.5 }}>{error}</div>}
+          {success && <div style={{ color: T.green, fontSize: 12.5 }}>Live test scheduled.</div>}
+        </div>
+      )}
+
+      {mine.length > 0 && (
+        <div style={{ display: "grid", gap: 6 }}>
+          {mine.map((s) => (
+            <div key={s.id} className="ledger-row" style={{ padding: "10px 14px" }}>
+              <div>
+                <div style={{ fontSize: 13, color: T.ink }}>{s.test?.title || "Test"}</div>
+                <div style={{ fontSize: 11.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{formatScheduledTime(s.scheduledStart)}</div>
+              </div>
+              {s.status === "closed" ? (
+                <button className="btn-outline" style={{ padding: "5px 12px", fontSize: 12.5 }} onClick={() => onViewLeaderboard(s.id)}>Leaderboard</button>
+              ) : (
+                <span style={{ fontSize: 11.5, fontFamily: "var(--font-mono)", color: s.status === "live" ? T.green : T.saffronDeep, textTransform: "uppercase" }}>
+                  {s.status === "live" ? "Live now" : "Upcoming"}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function PassManager({ myPass, onCreatePass }) {
+  const [price, setPrice] = useState(myPass?.price || 499);
+  const [durationDays, setDurationDays] = useState(myPass?.durationDays || 30);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const save = async () => {
+    setError(""); setSuccess(false); setBusy(true);
+    try {
+      await onCreatePass({ price: Number(price), durationDays: Number(durationDays) });
+      setSuccess(true);
+    } catch (err) {
+      setError(err.message || "Couldn't save this pass.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="referral-panel">
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <Package size={17} color={T.saffronDeep} /> All-access pass
+      </div>
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 14 }}>
+        Offer unlimited access to every one of your tests for a fixed price and duration, instead of buyers purchasing one at a time. Paid the same one-time way as everything else — buyers renew manually rather than being auto-charged.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
+        <label className="field-label">Price (₹)
+          <input type="number" min={1} className="field-input" value={price} onChange={(e) => setPrice(e.target.value)} disabled={busy} />
+        </label>
+        <label className="field-label">Duration (days)
+          <input type="number" min={1} max={365} className="field-input" value={durationDays} onChange={(e) => setDurationDays(e.target.value)} disabled={busy} />
+        </label>
+        <button className="btn-primary" onClick={save} disabled={busy}>
+          {busy ? <Loader2 size={14} className="spin" /> : <Package size={14} />} {myPass ? "Update" : "Enable"}
+        </button>
+      </div>
+      {error && <div style={{ color: T.red, fontSize: 12.5, marginTop: 8 }}>{error}</div>}
+      {success && <div style={{ color: T.green, fontSize: 12.5, marginTop: 8 }}>Saved — this now shows in the marketplace.</div>}
+      {myPass && !success && (
+        <div style={{ fontSize: 12, color: T.muted, marginTop: 10 }}>
+          Currently live: ₹{myPass.price} for {myPass.durationDays} days of access to all your tests.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function CouponManager({ myTests, myCoupons, onCreateCoupon, onDeleteCoupon }) {
+  const [code, setCode] = useState("");
+  const [testId, setTestId] = useState(""); // "" means applies to all of the seller's tests
+  const [discountPercent, setDiscountPercent] = useState(10);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const create = async () => {
+    setError(""); setBusy(true);
+    try {
+      await onCreateCoupon({ code, testId: testId || undefined, discountPercent: Number(discountPercent) });
+      setCode("");
+    } catch (err) {
+      setError(err.message || "Couldn't create this coupon.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="referral-panel">
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <Tag size={17} color={T.saffronDeep} /> Coupons
+      </div>
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 14 }}>
+        Create a discount code buyers can apply at checkout — for one specific test, or all of your tests at once.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.6fr 1fr auto", gap: 10, alignItems: "end", marginBottom: 10 }}>
+        <label className="field-label">Code
+          <input className="field-input" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="WELCOME10" disabled={busy} />
+        </label>
+        <label className="field-label">Applies to
+          <select className="field-input" value={testId} onChange={(e) => setTestId(e.target.value)} disabled={busy}>
+            <option value="">All of my tests</option>
+            {myTests.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+        </label>
+        <label className="field-label">Discount %
+          <input type="number" min={1} max={90} className="field-input" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} disabled={busy} />
+        </label>
+        <button className="btn-primary" onClick={create} disabled={busy}>
+          {busy ? <Loader2 size={14} className="spin" /> : <Tag size={14} />} Create
+        </button>
+      </div>
+      {error && <div style={{ color: T.red, fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
+
+      {myCoupons.length > 0 && (
+        <div style={{ display: "grid", gap: 6 }}>
+          {myCoupons.map((c) => (
+            <div key={c.id} className="ledger-row" style={{ padding: "8px 14px" }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: T.ink }}>{c.code}</div>
+              <div style={{ fontSize: 12, color: T.muted, flex: 1, marginLeft: 12 }}>
+                {c.discountPercent}% off · {c.testId ? "One test" : "All tests"} · used {c.usedCount}{c.maxUses ? `/${c.maxUses}` : ""}
+              </div>
+              <button className="icon-btn" title="Delete coupon" onClick={() => onDeleteCoupon(c.id)}><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function TestAnalyticsView({ testId, testTitle, onBack }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getTestAnalytics(testId).then(setData).catch((e) => setError(e.message || "Couldn't load analytics."));
+  }, [testId]);
+
+  const chartData = data
+    ? data.questions
+        .filter((q) => q.accuracy !== null)
+        .slice()
+        .sort((a, b) => a.accuracy - b.accuracy)
+        .slice(0, 12)
+        .map((q) => ({ label: `Q${q.index + 1}`, Accuracy: q.accuracy, fullText: q.text }))
+    : [];
+
+  return (
+    <div style={{ padding: "26px 28px 44px" }}>
+      <button className="btn-outline" onClick={onBack} style={{ marginBottom: 18 }}><ChevronLeft size={15} /> Back to catalogue</button>
+      <SectionLabel eyebrow="Analytics" title={testTitle || "Test analytics"} />
+      {error && <div style={{ color: T.red, fontSize: 13.5 }}>{error}</div>}
+      {!data && !error && <div style={{ color: T.muted, fontSize: 13.5 }}>Loading…</div>}
+      {data && (
+        <>
+          <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 26 }}>
+            <div><div className="fig-label">Total attempts</div><div className="fig-value">{data.totalAttempts}</div></div>
+            <div><div className="fig-label">Avg. time taken</div><div className="fig-value">{formatDuration(data.avgTimeSeconds)}</div></div>
+          </div>
+
+          {data.totalAttempts === 0 ? (
+            <div className="empty-panel">
+              <BarChart3 size={22} color={T.saffronDeep} />
+              <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>No attempts yet</div>
+              <div style={{ fontSize: 13.5, color: T.muted, marginTop: 4 }}>Once buyers start attempting this test, question-level accuracy shows up here.</div>
+            </div>
+          ) : (
+            <>
+              <SectionLabel eyebrow="Focus areas" title="Hardest questions (lowest accuracy first)" />
+              <div style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 20 }}>
+                <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 34)}>
+                  <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.line} horizontal={false} />
+                    <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
+                    <YAxis type="category" dataKey="label" width={40} tick={{ fontSize: 11.5, fontFamily: "var(--font-mono)", fill: T.ink }} />
+                    <Tooltip
+                      contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}`, maxWidth: 260 }}
+                      formatter={(value) => [`${value}%`, "Accuracy"]}
+                      labelFormatter={(label, payload) => payload?.[0]?.payload?.fullText || label}
+                    />
+                    <Bar dataKey="Accuracy" radius={[0, 4, 4, 0]}>
+                      {chartData.map((d, i) => <Cell key={i} fill={d.Accuracy < 40 ? T.red : d.Accuracy < 70 ? T.saffronDeep : T.green} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ fontSize: 12, color: T.muted }}>Showing the {chartData.length} lowest-accuracy questions with at least one answer recorded.</div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+
+function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [bundleWizardOpen, setBundleWizardOpen] = useState(false);
+  const [analyticsTest, setAnalyticsTest] = useState(null);
 
   if (!session || session.role !== "seller") {
     return (
@@ -1687,6 +2087,10 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
   }
 
   const sellerName = session.businessName || session.name;
+
+  if (analyticsTest) {
+    return <TestAnalyticsView testId={analyticsTest.id} testTitle={analyticsTest.title} onBack={() => setAnalyticsTest(null)} />;
+  }
 
   const rows = myTests.map((t) => {
     const earn = Math.round(t.gross * (sellerShare / 100));
@@ -1733,6 +2137,18 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
         <SellerReferralPanel me={session} />
       </div>
 
+      <div style={{ marginTop: 20 }}>
+        <LiveTestManager myTests={myTests} scheduledTests={scheduledTests} sellerEmail={session.email} onScheduleTest={onScheduleTest} onViewLeaderboard={onViewLeaderboard} />
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <PassManager myPass={allAccessPasses.find((p) => p.sellerEmail === session.email)} onCreatePass={onCreatePass} />
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <CouponManager myTests={myTests} myCoupons={myCoupons} onCreateCoupon={onCreateCoupon} onDeleteCoupon={onDeleteCoupon} />
+      </div>
+
       <div style={{ marginTop: 30 }}>
         <SectionLabel eyebrow="Catalogue" title="Your tests" />
       </div>
@@ -1768,6 +2184,7 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
                 <div><div className="fig-label">Platform</div><div className="fig-value" style={{ color: T.muted }}>₹{fee}</div></div>
               </div>
               <ShareMenu test={test} variant="seller" />
+              <button className="icon-btn" title="Question analytics" onClick={() => setAnalyticsTest(test)}><BarChart3 size={15} /></button>
             </div>
           );
         })}
@@ -2083,12 +2500,61 @@ function formatDuration(totalSeconds) {
   return `${m}m ${s.toString().padStart(2, "0")}s`;
 }
 
-function ReportView({ test, attempt, onRate, onBack, history }) {
+function LeaderboardView({ scheduledTestId, onBack }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getLeaderboard(scheduledTestId).then(setData).catch(() => setError("Couldn't load the leaderboard."));
+  }, [scheduledTestId]);
+
+  return (
+    <div style={{ padding: "26px 28px 44px", maxWidth: 640, margin: "0 auto" }}>
+      <button className="btn-outline" onClick={onBack} style={{ marginBottom: 18 }}><ChevronLeft size={15} /> Back</button>
+      <SectionLabel eyebrow="Live test" title={data?.scheduledTest?.test?.title ? `Leaderboard — ${data.scheduledTest.test.title}` : "Leaderboard"} />
+      {error && <div style={{ color: T.red, fontSize: 13.5 }}>{error}</div>}
+      {!data && !error && <div style={{ color: T.muted, fontSize: 13.5 }}>Loading…</div>}
+      {data && data.leaderboard.length === 0 && (
+        <div className="empty-panel">
+          <Users size={22} color={T.saffronDeep} />
+          <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>No one joined this session</div>
+          <div style={{ fontSize: 13.5, color: T.muted, marginTop: 4 }}>Nobody completed this live test during its join window.</div>
+        </div>
+      )}
+      {data && data.leaderboard.length > 0 && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {data.leaderboard.map((r) => (
+            <div key={r.rank} className="ledger-row" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{
+                fontFamily: "var(--font-display)", fontSize: 16, width: 30, textAlign: "center",
+                color: r.rank === 1 ? T.saffronDeep : T.muted, fontWeight: r.rank <= 3 ? 700 : 400,
+              }}>
+                {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : r.rank}
+              </div>
+              <div style={{ flex: 1, fontSize: 14, color: T.ink }}>{r.buyerName}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 13.5, color: T.muted }}>{formatDuration(r.timeTakenSeconds)}</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: T.green, minWidth: 56, textAlign: "right" }}>{r.score}/{r.total}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportView({ test, attempt, onRate, onBack, history, percentile, allTests }) {
   const [myRating, setMyRating] = useState(null);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [reviewText, setReviewText] = useState("");
+  const [reviews, setReviews] = useState([]);
   const pct = Math.round((attempt.score / attempt.total) * 100);
   const chartData = Object.entries(attempt.topicMap).map(([topic, v]) => ({
     topic, Correct: v.correct, Missed: v.total - v.correct,
   }));
+
+  useEffect(() => {
+    api.getTestReviews(test.id).then((d) => setReviews(d.reviews)).catch(() => {});
+  }, [test.id]);
 
   const priorAttempts = (history || []).filter((a) => a.id !== attempt.id);
   const bestPriorPct = priorAttempts.length ? Math.max(...priorAttempts.map((a) => Math.round((a.score / a.total) * 100))) : null;
@@ -2127,6 +2593,12 @@ function ReportView({ test, attempt, onRate, onBack, history }) {
               <div className="fig-value" style={{ color: improvement > 0 ? T.green : improvement < 0 ? T.red : T.muted }}>
                 {improvement > 0 ? `+${improvement}%` : improvement === 0 ? "Same" : `${improvement}%`}
               </div>
+            </div>
+          )}
+          {percentile !== null && percentile !== undefined && (
+            <div>
+              <div className="fig-label">Among all candidates</div>
+              <div className="fig-value" style={{ color: T.saffronDeep }}>Beat {percentile}%</div>
             </div>
           )}
         </div>
@@ -2197,12 +2669,60 @@ function ReportView({ test, attempt, onRate, onBack, history }) {
       <SectionLabel eyebrow="Feedback" title="Rate this test" />
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} className="icon-btn" onClick={() => { onRate(n); setMyRating(n); }}>
+          <button key={n} className="icon-btn" onClick={() => setMyRating(n)} disabled={ratingSubmitted}>
             <Star size={22} color={T.saffronDeep} fill={myRating >= n ? T.saffronDeep : "none"} />
           </button>
         ))}
       </div>
-      {myRating && <div style={{ fontSize: 13, color: T.green }}>Thanks — your rating helps other candidates choose.</div>}
+      {myRating && !ratingSubmitted && (
+        <div style={{ marginBottom: 10 }}>
+          <textarea
+            className="field-input" rows={3} placeholder="Optional — write a few words about this test for other candidates"
+            value={reviewText} onChange={(e) => setReviewText(e.target.value)} style={{ resize: "vertical", marginBottom: 8 }}
+          />
+          <button
+            className="btn-primary"
+            onClick={() => { onRate(myRating, reviewText.trim() || undefined); setRatingSubmitted(true); }}
+          >
+            Submit rating
+          </button>
+        </div>
+      )}
+      {ratingSubmitted && <div style={{ fontSize: 13, color: T.green, marginBottom: 20 }}>Thanks — your rating helps other candidates choose.</div>}
+
+      {reviews.length > 0 && (
+        <>
+          <SectionLabel eyebrow="From other candidates" title="Reviews" />
+          <div style={{ display: "grid", gap: 10, marginBottom: 30 }}>
+            {reviews.map((r, i) => (
+              <div key={i} style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <Stars value={r.value} size={13} />
+                  <span style={{ fontSize: 12.5, color: T.muted }}>{r.buyerName}</span>
+                </div>
+                <div style={{ fontSize: 13.5, color: T.ink }}>{r.text}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {allTests && allTests.filter((t) => t.category === test.category && t.id !== test.id).length > 0 && (
+        <>
+          <SectionLabel eyebrow="Keep practicing" title="Similar tests" />
+          <div className="grid-cards" style={{ marginBottom: 20 }}>
+            {allTests.filter((t) => t.category === test.category && t.id !== test.id).slice(0, 3).map((t) => (
+              <div key={t.id} className="ticket-card">
+                <div style={{ padding: "14px 16px" }}>
+                  <Stamp>{t.category}</Stamp>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: T.ink, margin: "8px 0 4px" }}>{t.title}</div>
+                  <div style={{ fontSize: 12, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questions.length} Qs · ₹{t.price}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2328,7 +2848,92 @@ function SellerReferralPanel({ me }) {
 }
 
 
-function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin }) {
+function ProgressDashboard({ attempts }) {
+  if (attempts.length === 0) {
+    return (
+      <div className="empty-panel">
+        <TrendingUp size={22} color={T.saffronDeep} />
+        <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>No progress yet</div>
+        <div style={{ fontSize: 13.5, color: T.muted, marginTop: 4 }}>Attempt a test to start building your progress history.</div>
+      </div>
+    );
+  }
+
+  const sorted = attempts.slice().sort((a, b) => a.ts - b.ts);
+  const trendData = sorted.map((a, i) => ({ label: `#${i + 1}`, Accuracy: Math.round((a.score / a.total) * 100) }));
+
+  const uniqueTests = new Set(attempts.map((a) => a.testId)).size;
+  const totalQuestions = attempts.reduce((s, a) => s + a.total, 0);
+  const totalCorrect = attempts.reduce((s, a) => s + a.score, 0);
+  const overallAccuracy = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+
+  // Merge every attempt's topic-wise breakdown into one running total per topic,
+  // so weak areas show up across the buyer's whole history, not just one test.
+  const topicAgg = {};
+  attempts.forEach((a) => {
+    Object.entries(a.topicMap || {}).forEach(([topic, v]) => {
+      topicAgg[topic] = topicAgg[topic] || { correct: 0, total: 0 };
+      topicAgg[topic].correct += v.correct;
+      topicAgg[topic].total += v.total;
+    });
+  });
+  const weakTopics = Object.entries(topicAgg)
+    .map(([topic, v]) => ({ topic, accuracy: Math.round((v.correct / v.total) * 100), total: v.total, correct: v.correct }))
+    .filter((t) => t.total >= 2) // skip topics seen only once — too noisy to call "weak" yet
+    .sort((a, b) => a.accuracy - b.accuracy)
+    .slice(0, 8);
+  const chartData = weakTopics.map((t) => ({ topic: t.topic, Correct: t.correct, Missed: t.total - t.correct }));
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 26 }}>
+        <div><div className="fig-label">Tests attempted</div><div className="fig-value">{uniqueTests}</div></div>
+        <div><div className="fig-label">Total attempts</div><div className="fig-value">{attempts.length}</div></div>
+        <div><div className="fig-label">Questions answered</div><div className="fig-value">{totalQuestions}</div></div>
+        <div><div className="fig-label">Overall accuracy</div><div className="fig-value" style={{ color: overallAccuracy >= 50 ? T.green : T.red }}>{overallAccuracy}%</div></div>
+      </div>
+
+      {trendData.length > 1 && (
+        <>
+          <SectionLabel eyebrow="Trend" title="Your accuracy over time" />
+          <div style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 30 }}>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={trendData} margin={{ left: 0, right: 10, top: 6 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.line} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
+                <YAxis tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} unit="%" />
+                <Tooltip contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}` }} />
+                <Bar dataKey="Accuracy" fill={T.saffronDeep} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+
+      {weakTopics.length > 0 && (
+        <>
+          <SectionLabel eyebrow="Focus areas" title="Topics to revise, across every test" />
+          <div style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 10 }}>
+            <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 56)}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.line} horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
+                <YAxis type="category" dataKey="topic" width={140} tick={{ fontSize: 12.5, fontFamily: "var(--font-body)", fill: T.ink }} />
+                <Tooltip contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}` }} />
+                <Bar dataKey="Correct" stackId="a" fill={T.green} radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Missed" stackId="a" fill={T.red} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin, percentileByAttemptId }) {
+  const [tab, setTab] = useState("tests"); // "tests" | "progress"
   const myTests = tests.filter((t) => purchasedIds.has(t.id));
 
   if (!session || session.role !== "buyer") {
@@ -2358,7 +2963,7 @@ function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, ac
     const attempt = attempts.find((a) => a.id === reportAttemptId);
     const test = tests.find((t) => t.id === attempt.testId);
     const history = attempts.filter((a) => a.testId === attempt.testId);
-    return <ReportView test={test} attempt={attempt} onRate={(n) => onRate(attempt.id, attempt.testId, n)} onBack={clearReport} history={history} />;
+    return <ReportView test={test} attempt={attempt} onRate={(n, text) => onRate(attempt.id, attempt.testId, n, text)} onBack={clearReport} history={history} percentile={percentileByAttemptId?.[attempt.id]} allTests={tests} />;
   }
 
   const me = session;
@@ -2367,45 +2972,76 @@ function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, ac
     <div style={{ padding: "26px 28px 40px" }}>
       <SectionLabel eyebrow="My learning" title="Tests you've bought" />
       <ReferralPanel me={me} />
-      {myTests.length === 0 && (
-        <div className="empty-panel">
-          <BookOpen size={22} color={T.saffronDeep} />
-          <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>Nothing here yet</div>
-          <div style={{ fontSize: 13.5, color: T.muted, marginTop: 4, marginBottom: 14 }}>Buy a test from the marketplace to attempt it and get a score report.</div>
-          <button className="btn-primary" onClick={onExitToMarket}><Store size={15} /> Browse marketplace</button>
-        </div>
-      )}
-      <div className="grid-cards">
-        {myTests.map((t) => {
-          const myAttempts = attempts.filter((a) => a.testId === t.id);
-          const best = myAttempts.length ? myAttempts.reduce((a, b) => (b.score > a.score ? b : a)) : null;
-          return (
-            <div key={t.id} className="ticket-card">
-              <div style={{ padding: "16px 18px 14px" }}>
-                <Stamp>{t.category}</Stamp>
-                <h3 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: T.ink, margin: "10px 0 6px" }}>{t.title}</h3>
-                <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questions.length} Qs · {t.duration} min</div>
-                {best && (
-                  <div style={{ marginTop: 10, fontSize: 13, color: T.ink }}>
-                    Best score: <strong style={{ color: T.green }}>{best.score}/{best.total}</strong>
-                  </div>
-                )}
-              </div>
-              <div className="ticket-perforation" />
-              <div style={{ padding: "12px 18px 16px", display: "flex", gap: 8 }}>
-                <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onStart(t.id)}>
-                  <Play size={14} /> {best ? "Retake" : "Start test"}
-                </button>
-                {best && (
-                  <button className="btn-outline" onClick={() => onOpenReport(best.id)}>
-                    Report
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: `1px solid ${T.line}` }}>
+        <button
+          onClick={() => setTab("tests")}
+          style={{
+            background: "none", border: "none", cursor: "pointer", padding: "8px 4px 12px", fontSize: 14,
+            fontFamily: "var(--font-body)", fontWeight: tab === "tests" ? 700 : 500,
+            color: tab === "tests" ? T.ink : T.muted, borderBottom: tab === "tests" ? `2px solid ${T.saffronDeep}` : "2px solid transparent",
+          }}
+        >
+          My Tests
+        </button>
+        <button
+          onClick={() => setTab("progress")}
+          style={{
+            background: "none", border: "none", cursor: "pointer", padding: "8px 4px 12px", fontSize: 14,
+            fontFamily: "var(--font-body)", fontWeight: tab === "progress" ? 700 : 500,
+            color: tab === "progress" ? T.ink : T.muted, borderBottom: tab === "progress" ? `2px solid ${T.saffronDeep}` : "2px solid transparent",
+            marginLeft: 12,
+          }}
+        >
+          My Progress
+        </button>
       </div>
+
+      {tab === "progress" ? (
+        <ProgressDashboard attempts={attempts} />
+      ) : (
+        <>
+          {myTests.length === 0 && (
+            <div className="empty-panel">
+              <BookOpen size={22} color={T.saffronDeep} />
+              <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>Nothing here yet</div>
+              <div style={{ fontSize: 13.5, color: T.muted, marginTop: 4, marginBottom: 14 }}>Buy a test from the marketplace to attempt it and get a score report.</div>
+              <button className="btn-primary" onClick={onExitToMarket}><Store size={15} /> Browse marketplace</button>
+            </div>
+          )}
+          <div className="grid-cards">
+            {myTests.map((t) => {
+              const myAttempts = attempts.filter((a) => a.testId === t.id);
+              const best = myAttempts.length ? myAttempts.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+              return (
+                <div key={t.id} className="ticket-card">
+                  <div style={{ padding: "16px 18px 14px" }}>
+                    <Stamp>{t.category}</Stamp>
+                    <h3 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: T.ink, margin: "10px 0 6px" }}>{t.title}</h3>
+                    <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questions.length} Qs · {t.duration} min</div>
+                    {best && (
+                      <div style={{ marginTop: 10, fontSize: 13, color: T.ink }}>
+                        Best score: <strong style={{ color: T.green }}>{best.score}/{best.total}</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div className="ticket-perforation" />
+                  <div style={{ padding: "12px 18px 16px", display: "flex", gap: 8 }}>
+                    <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onStart(t.id)}>
+                      <Play size={14} /> {best ? "Retake" : "Start test"}
+                    </button>
+                    {best && (
+                      <button className="btn-outline" onClick={() => onOpenReport(best.id)}>
+                        Report
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2979,6 +3615,7 @@ const HELP_GUIDES = {
         { type: "ol", items: [
           "Click Buy on any test (or Buy bundle).",
           "If you have an unused referral reward, check the box for 50% off.",
+          "If a seller gave you a coupon code, enter it in the optional coupon field.",
           "Pay via UPI, card, or netbanking.",
           "The test unlocks immediately in My Learning.",
         ] },
@@ -2994,13 +3631,37 @@ const HELP_GUIDES = {
       { heading: "6. Understand Your Score Report", body: [
         { type: "ul", items: [
           "Accuracy and time taken, compared to your previous best attempt.",
+          "Your percentile among every candidate who's taken that test \u2014 shown as \u201cBeat X% of candidates.\u201d",
           "A topic-wise breakdown chart showing exactly where you're strong or weak.",
           "A question-by-question review with explanations.",
           "An improvement chart once you've retaken a test.",
+          "Reviews from other candidates, and similar tests in the same category if you want more practice.",
         ] },
       ] },
       { heading: "7. Rate Tests & Refer Friends", body: [
-        { type: "p", text: "Rate any test 1\u20135 stars after your report. In My Learning \u2192 Refer & earn, you'll find your referral code and link \u2014 the moment someone you refer makes their first purchase, you get 50% off your own next one." },
+        { type: "p", text: "Rate any test 1\u20135 stars after your report, and optionally write a short review \u2014 both show up for other candidates taking the same test. In My Learning \u2192 Refer & earn, you'll find your referral code and link \u2014 the moment someone you refer makes their first purchase, you get 50% off your own next one." },
+      ] },
+      { heading: "8. Track Your Progress Over Time", body: [
+        { type: "p", text: "In My Learning, switch to the \u201cMy Progress\u201d tab to see:" },
+        { type: "ul", items: [
+          "Tests attempted, total attempts, questions answered, and overall accuracy across everything you've taken",
+          "An accuracy trend chart showing whether you're improving over time",
+          "Your weakest topics aggregated across every test \u2014 not just one report",
+        ] },
+      ] },
+      { heading: "9. Join a Live Test", body: [
+        { type: "p", text: "Some sellers schedule tests as live events, shown in a \u201cLive tests\u201d section on the Marketplace." },
+        { type: "ul", items: [
+          "Upcoming sessions show when they'll start.",
+          "Live now sessions can be joined immediately if you own that test \u2014 or click Buy to join if you don't yet.",
+          "Once the join window closes, click View leaderboard to see final rankings by score, then speed.",
+        ] },
+      ] },
+      { heading: "10. All-Access Passes", body: [
+        { type: "p", text: "Some sellers offer unlimited access to everything they sell, for a fixed price and duration. Look for \u201cAll-access passes\u201d on the Marketplace and click Get this pass \u2014 every test from that seller unlocks automatically. It doesn't auto-renew; buy it again anytime to extend your access." },
+      ] },
+      { heading: "11. Wishlist", body: [
+        { type: "p", text: "Click the heart icon on any test card to save it for later without buying it yet. Click it again to remove it." },
       ] },
     ],
   },
@@ -3056,6 +3717,30 @@ const HELP_GUIDES = {
           "Refer a student or buyer \u2014 earn \u20b9200 the moment they complete their first purchase",
         ] },
         { type: "callout", text: "Referral bonuses sit on top of your normal sales earnings \u2014 they're not reduced by the platform's profit-split percentage, since they're funded entirely by TestMandi." },
+      ] },
+      { heading: "9. Live Tests \u2014 Turn Any Test Into an Event", body: [
+        { type: "p", text: "Schedule one of your existing tests as a live event instead of anytime-practice:" },
+        { type: "ol", items: [
+          "In Seller Studio, find the \u201cLive tests\u201d panel.",
+          "Pick a published test, a start date & time, and a join window (default 30 minutes).",
+          "Click Schedule.",
+        ] },
+        { type: "callout", text: "Everyone who joins during that window competes on the same shared leaderboard, ranked by score then speed. Only buyers who already own the test can join. Once the window closes, click Leaderboard next to that session to see final rankings." },
+      ] },
+      { heading: "10. Question Analytics", body: [
+        { type: "p", text: "Click the bar-chart icon next to any test in your catalogue to see total attempts, average time taken, and a chart of your hardest questions \u2014 the ones buyers get wrong most often, sorted worst-first. If something sits at a much lower accuracy than everything nearby, it's worth a second look for a mis-keyed answer or confusing wording." },
+      ] },
+      { heading: "11. All-Access Pass \u2014 a Second Way to Earn", body: [
+        { type: "p", text: "Offer unlimited access to everything you sell for a flat price instead of one-test-at-a-time purchases:" },
+        { type: "ol", items: [
+          "In Seller Studio, find the \u201cAll-access pass\u201d panel.",
+          "Set a price and a duration in days.",
+          "Click Enable.",
+        ] },
+        { type: "callout", text: "Paid the same one-time way as a regular purchase \u2014 buyers renew manually, no recurring billing to manage. A repeat purchase from the same buyer extends their access rather than resetting it." },
+      ] },
+      { heading: "12. Coupons \u2014 Run Your Own Promotions", body: [
+        { type: "p", text: "Create a discount code for one specific test, or all of your tests at once, in the \u201cCoupons\u201d panel in Seller Studio. Buyers enter it at checkout and the discount applies automatically before payment. Deleting a coupon stops new redemptions without affecting anyone who already used it." },
       ] },
       { heading: "Tips for a Strong Listing", body: [
         { type: "ul", items: [
@@ -3267,7 +3952,14 @@ function AppShell({ routeTestId }) {
     }
   };
   const [activeTestId, setActiveTestId] = useState(null);
+  const [activeScheduledTestId, setActiveScheduledTestId] = useState(null);
+  const [scheduledTests, setScheduledTests] = useState([]);
+  const [allAccessPasses, setAllAccessPasses] = useState([]);
+  const [myAccessGrants, setMyAccessGrants] = useState([]);
+  const [myCoupons, setMyCoupons] = useState([]);
   const [reportAttemptId, setReportAttemptId] = useState(null);
+  const [percentileByAttemptId, setPercentileByAttemptId] = useState({});
+  const [leaderboardId, setLeaderboardId] = useState(null);
   const [categories, setCategories] = useState(CATEGORIES_SEED);
   const [notifications, setNotifications] = useState([]);
 
@@ -3409,10 +4101,12 @@ function AppShell({ routeTestId }) {
       api.getMyPurchases().then((d) => setPurchases(d.purchases)).catch(() => {});
       api.getMyBundlePurchases().then((d) => setBundlePurchases(d.bundlePurchases)).catch(() => {});
       api.getMyAttempts().then((d) => setAttempts(d.attempts)).catch(() => {});
+      api.getMyAccessGrants().then((d) => setMyAccessGrants(d.grants)).catch(() => {});
     } else if (session.role === "seller") {
       api.getMyTests().then((d) => setSellerTests(d.tests)).catch(() => {});
       api.getMyBundles().then((d) => setSellerBundles(d.bundles)).catch(() => {});
       api.getMyPayouts().then((d) => setSellerPayouts(d)).catch(() => {});
+      api.getMyCoupons().then((d) => setMyCoupons(d.coupons)).catch(() => {});
     } else if (session.role === "advertiser") {
       api.getMyAds().then((d) => setAds(d.ads)).catch(() => {});
     } else if (session.role === "admin") {
@@ -3479,13 +4173,15 @@ function AppShell({ routeTestId }) {
   // app still shows something rather than going blank.
   const [backendUnreachable, setBackendUnreachable] = useState(false);
   useEffect(() => {
-    Promise.all([api.getCategories(), api.getTests(), api.getBundles(), api.getActiveAds(), api.getSettings()])
-      .then(([catData, testData, bundleData, adData, settingsData]) => {
+    Promise.all([api.getCategories(), api.getTests(), api.getBundles(), api.getActiveAds(), api.getSettings(), api.getScheduledTests(), api.getAllAccessPasses()])
+      .then(([catData, testData, bundleData, adData, settingsData, scheduledData, passData]) => {
         setCategories(catData.categories);
         setTests(testData.tests);
         setBundles(bundleData.bundles);
         setMarketplaceAds(adData.ads);
         setSellerShare(settingsData.sellerSharePercent);
+        setScheduledTests(scheduledData.scheduledTests);
+        setAllAccessPasses(passData.passes);
         setBackendUnreachable(false);
       })
       .catch(() => setBackendUnreachable(true));
@@ -3512,6 +4208,9 @@ function AppShell({ routeTestId }) {
     } else if (checkoutKind === "bundle") {
       if (result?.purchase) setBundlePurchases((bp) => [...bp, result.purchase]);
       setRole("learning");
+    } else if (checkoutKind === "pass") {
+      if (result?.grant) setMyAccessGrants((g) => [...g.filter((x) => x.sellerEmail !== result.grant.sellerEmail), result.grant]);
+      setRole("learning");
     } else {
       if (result?.purchase) setPurchases((p) => [...p, result.purchase]);
       setRole("learning");
@@ -3536,22 +4235,67 @@ function AppShell({ routeTestId }) {
     setSellerTests((t) => [{ ...test, unitsSold: 0, gross: 0 }, ...t]);
   };
 
+  const scheduleLiveTest = async (draft) => {
+    const { scheduledTest } = await api.createScheduledTest(draft);
+    const fullTest = tests.find((t) => t.id === scheduledTest.testId) || sellerTests.find((t) => t.id === scheduledTest.testId);
+    setScheduledTests((s) => [...s, { ...scheduledTest, test: fullTest }]);
+  };
+
+  const createPass = async (draft) => {
+    const { pass } = await api.createAllAccessPass(draft);
+    setAllAccessPasses((p) => [...p.filter((x) => x.sellerEmail !== session.email), { ...pass, sellerName: session.businessName || session.name }]);
+  };
+
+  const createCoupon = async (draft) => {
+    const { coupon } = await api.createCoupon(draft);
+    setMyCoupons((c) => [coupon, ...c]);
+  };
+
+  const deleteCoupon = async (id) => {
+    await api.deleteCoupon(id);
+    setMyCoupons((c) => c.filter((x) => x.id !== id));
+  };
+
+  const startLiveTest = (scheduledTestId, testId) => {
+    setActiveScheduledTestId(scheduledTestId);
+    setActiveTestId(testId);
+    setRole("learning");
+  };
+
   const submitAttempt = async ({ score, total, answers, topicMap, timeTakenSeconds }) => {
-    const { attempt } = await api.submitAttempt({ testId: activeTestId, score, total, answers, topicMap, timeTakenSeconds });
+    const { attempt, percentile } = await api.submitAttempt({ testId: activeTestId, score, total, answers, topicMap, timeTakenSeconds, scheduledTestId: activeScheduledTestId });
     setAttempts((a) => [...a, attempt]);
+    if (percentile !== null && percentile !== undefined) setPercentileByAttemptId((m) => ({ ...m, [attempt.id]: percentile }));
     setActiveTestId(null);
+    setActiveScheduledTestId(null);
     setReportAttemptId(attempt.id);
   };
 
-  const rateAttempt = async (attemptId, testId, n) => {
+  const rateAttempt = async (attemptId, testId, n, reviewText) => {
     try {
-      const { test } = await api.rateTest(testId, n);
+      const { test } = await api.rateTest(testId, n, reviewText);
       setTests((ts) => ts.map((t) => (t.id === test.id ? test : t)));
       setRatedTestIds((s) => new Set([...s, testId]));
     } catch (err) {
       // Already rated, or something else went wrong — surface nothing disruptive; the
       // UI simply won't mark it as freshly rated. Good enough for a rating action.
     }
+  };
+
+  // Optimistic — updates the session's own wishlist list immediately, then
+  // fires the real request; a failure here just means the toggle didn't
+  // stick server-side, which the next login/refresh would reveal anyway.
+  const toggleWishlist = async (testId, currentlyWishlisted) => {
+    setSession((s) => ({
+      ...s,
+      wishlistTestIds: currentlyWishlisted
+        ? (s.wishlistTestIds || []).filter((id) => id !== testId)
+        : [...(s.wishlistTestIds || []), testId],
+    }));
+    try {
+      if (currentlyWishlisted) await api.removeFromWishlist(testId);
+      else await api.addToWishlist(testId);
+    } catch (err) { /* best-effort — see comment above */ }
   };
 
   const currentSellerName = session?.role === "seller" ? (session.businessName || session.name) : null;
@@ -3850,6 +4594,10 @@ function AppShell({ routeTestId }) {
 
       {session && session.emailVerified === false && <VerifyEmailBanner />}
 
+      {leaderboardId ? (
+        <LeaderboardView scheduledTestId={leaderboardId} onBack={() => setLeaderboardId(null)} />
+      ) : (
+      <>
       {role === "marketplace" && (
         <Marketplace
           tests={tests}
@@ -3863,6 +4611,14 @@ function AppShell({ routeTestId }) {
           sellerShare={sellerShare}
           categories={categories}
           sharedItemId={sharedItemId}
+          scheduledTests={scheduledTests}
+          onJoinLive={startLiveTest}
+          onViewLeaderboard={setLeaderboardId}
+          allAccessPasses={allAccessPasses}
+          myAccessGrants={myAccessGrants}
+          onBuyPass={(p) => startCheckout({ id: p.id, title: `All-access pass — ${p.sellerName}`, price: p.price, sellerName: p.sellerName }, "pass")}
+          wishlistIds={session?.role === "buyer" ? new Set(session.wishlistTestIds || []) : null}
+          onToggleWishlist={session?.role === "buyer" ? toggleWishlist : undefined}
         />
       )}
       {role === "seller" && (
@@ -3878,6 +4634,14 @@ function AppShell({ routeTestId }) {
           onWithdraw={withdrawSellerFunds}
           onRequireLogin={requireLoginFor}
           categories={categories}
+          scheduledTests={scheduledTests}
+          onScheduleTest={scheduleLiveTest}
+          onViewLeaderboard={setLeaderboardId}
+          allAccessPasses={allAccessPasses}
+          onCreatePass={createPass}
+          myCoupons={myCoupons}
+          onCreateCoupon={createCoupon}
+          onDeleteCoupon={deleteCoupon}
         />
       )}
       {role === "learning" && (
@@ -3897,6 +4661,7 @@ function AppShell({ routeTestId }) {
           clearReport={() => setReportAttemptId(null)}
           session={session}
           onRequireLogin={requireLoginFor}
+          percentileByAttemptId={percentileByAttemptId}
         />
       )}
       {role === "ads" && (
@@ -3932,6 +4697,8 @@ function AppShell({ routeTestId }) {
           session={session}
           onAccountUpdated={(u) => { upsertLocalUser(u); setSession(u); }}
         />
+      )}
+      </>
       )}
 
       <ChatWidget session={session} />

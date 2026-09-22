@@ -107,7 +107,7 @@ export const api = {
   getMyTests: () => request("/api/tests/mine"),
   createTest: (draft) => request("/api/tests", { method: "POST", body: draft }),
   deleteTest: (id) => request(`/api/tests/${id}`, { method: "DELETE" }),
-  rateTest: (testId, value) => request(`/api/tests/${testId}/rate`, { method: "POST", body: { value } }),
+  rateTest: (testId, value, reviewText) => request(`/api/tests/${testId}/rate`, { method: "POST", body: { value, reviewText } }),
 
   // ---- bundles ----
   getBundles: () => request("/api/bundles", { auth: false }),
@@ -134,6 +134,28 @@ export const api = {
   // ---- attempts ----
   submitAttempt: (payload) => request("/api/attempts", { method: "POST", body: payload }),
   getMyAttempts: () => request("/api/attempts/mine"),
+  createScheduledTest: (payload) => request("/api/scheduled-tests", { method: "POST", body: payload }),
+  getScheduledTests: () => request("/api/scheduled-tests"),
+  getMyScheduledTests: () => request("/api/scheduled-tests/mine"),
+  getLeaderboard: (id) => request(`/api/scheduled-tests/${id}/leaderboard`),
+  getTestAnalytics: (testId) => request(`/api/tests/${testId}/analytics`),
+
+  // ---- coupons ----
+  createCoupon: (payload) => request("/api/coupons", { method: "POST", body: payload }),
+  getMyCoupons: () => request("/api/coupons/mine"),
+  deleteCoupon: (id) => request(`/api/coupons/${id}`, { method: "DELETE" }),
+
+  // ---- all-access passes ----
+  createAllAccessPass: (payload) => request("/api/all-access-passes", { method: "POST", body: payload }),
+  getAllAccessPasses: () => request("/api/all-access-passes"),
+  getMyAccessGrants: () => request("/api/all-access-grants/mine"),
+
+  // ---- reviews ----
+  getTestReviews: (testId) => request(`/api/tests/${testId}/reviews`),
+
+  // ---- wishlist ----
+  addToWishlist: (testId) => request(`/api/wishlist/${testId}`, { method: "POST" }),
+  removeFromWishlist: (testId) => request(`/api/wishlist/${testId}`, { method: "DELETE" }),
 
   // ---- seller payouts ----
   saveBankDetails: (payload) => request("/api/payouts/bank", { method: "POST", body: payload }),
