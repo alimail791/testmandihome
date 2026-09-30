@@ -9,7 +9,7 @@ import {
   LogIn, LogOut, User, Landmark, ShieldCheck, CreditCard, Smartphone,
   Building2, ArrowDownToLine, Loader2, Lock, MessageCircle, Send, Bot,
   Share2, Copy, Bell, Gift, Timer, Megaphone, Check, Sparkles, ShieldOff, Package,
-  HelpCircle, Download, BarChart3, Heart, Tag,
+  HelpCircle, Download, BarChart3, Heart, Tag, Mail, Phone,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -3927,6 +3927,55 @@ function requiredRoleForCheckoutKind(kind) {
   return kind === "ad" ? "advertiser" : "buyer";
 }
 
+const TESTMANDI_WHATSAPP_NUMBER = "919003264537"; // no + or spaces, for wa.me links
+const TESTMANDI_WHATSAPP_DISPLAY = "+91 90032 64537";
+const TESTMANDI_CONTACT_EMAIL = "info@testmandi.in";
+const TESTMANDI_PARTNERSHIPS_EMAIL = "partnerships@testmandi.in";
+
+function SiteFooter() {
+  return (
+    <footer
+      style={{
+        marginTop: 40,
+        borderTop: "1px solid var(--rule, #e5e0d3)",
+        padding: "28px 20px 32px",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 18,
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "0.9rem",
+        color: "#6b7280",
+      }}
+    >
+      <span style={{ fontWeight: 600, color: "#1c2b4a" }}>TestMandi</span>
+      <a
+        href={`https://wa.me/${TESTMANDI_WHATSAPP_NUMBER}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#25D366", textDecoration: "none", fontWeight: 600 }}
+      >
+        <MessageCircle size={16} /> {TESTMANDI_WHATSAPP_DISPLAY}
+      </a>
+      <a
+        href={`mailto:${TESTMANDI_CONTACT_EMAIL}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#1c2b4a", textDecoration: "none", fontWeight: 600 }}
+      >
+        <Mail size={16} /> {TESTMANDI_CONTACT_EMAIL}
+      </a>
+      <a
+        href={`mailto:${TESTMANDI_PARTNERSHIPS_EMAIL}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#1c2b4a", textDecoration: "none", fontWeight: 600 }}
+      >
+        <Mail size={16} /> {TESTMANDI_PARTNERSHIPS_EMAIL}
+      </a>
+      <span style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
+        © {new Date().getFullYear()} TestMandi. All rights reserved.
+      </span>
+    </footer>
+  );
+}
+
 /* ---------------------------------------------------------------------- */
 /* App shell                                                              */
 /* ---------------------------------------------------------------------- */
@@ -4700,6 +4749,8 @@ function AppShell({ routeTestId }) {
       )}
       </>
       )}
+
+      <SiteFooter />
 
       <ChatWidget session={session} />
 
