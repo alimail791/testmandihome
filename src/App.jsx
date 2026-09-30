@@ -3928,9 +3928,23 @@ function requiredRoleForCheckoutKind(kind) {
 }
 
 const TESTMANDI_WHATSAPP_NUMBER = "919003264537"; // no + or spaces, for wa.me links
-const TESTMANDI_WHATSAPP_DISPLAY = "+91 90032 64537";
 const TESTMANDI_CONTACT_EMAIL = "info@testmandi.in";
 const TESTMANDI_PARTNERSHIPS_EMAIL = "partnerships@testmandi.in";
+
+function WhatsAppFloatButton() {
+  return (
+    <a
+      className="whatsapp-fab"
+      href={`https://wa.me/${TESTMANDI_WHATSAPP_NUMBER}?text=${encodeURIComponent("Hi TestMandi, I have a question about")}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Chat on WhatsApp"
+      aria-label="Chat on WhatsApp"
+    >
+      <MessageCircle size={26} fill="#fff" />
+    </a>
+  );
+}
 
 function SiteFooter() {
   return (
@@ -3953,9 +3967,10 @@ function SiteFooter() {
         href={`https://wa.me/${TESTMANDI_WHATSAPP_NUMBER}`}
         target="_blank"
         rel="noopener noreferrer"
+        title="Chat on WhatsApp"
         style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#25D366", textDecoration: "none", fontWeight: 600 }}
       >
-        <MessageCircle size={16} /> {TESTMANDI_WHATSAPP_DISPLAY}
+        <MessageCircle size={16} /> WhatsApp
       </a>
       <a
         href={`mailto:${TESTMANDI_CONTACT_EMAIL}`}
@@ -4533,6 +4548,8 @@ function AppShell({ routeTestId }) {
         .account-row { display: flex; justify-content: space-between; align-items: center; background: #fff; border: 1px solid ${T.line}; border-radius: 8px; padding: 10px 14px; }
 
         .chat-fab { position: fixed; bottom: 22px; right: 22px; width: 52px; height: 52px; border-radius: 50%; background: ${T.ink}; color: ${T.paper}; border: 2px solid ${T.saffron}; display: flex; align-items: center; justify-content: center; z-index: 60; box-shadow: 0 6px 18px rgba(27,42,74,0.35); }
+        .whatsapp-fab { position: fixed; bottom: 22px; left: 22px; width: 52px; height: 52px; border-radius: 50%; background: #25D366; display: flex; align-items: center; justify-content: center; z-index: 60; box-shadow: 0 6px 18px rgba(37,211,102,0.4); text-decoration: none; }
+        .whatsapp-fab:hover { background: #1ebe5b; }
         .chat-panel { position: fixed; bottom: 84px; right: 22px; width: 340px; max-width: calc(100vw - 44px); height: 440px; background: ${T.paper}; border: 1px solid ${T.line}; border-radius: 12px; z-index: 60; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(27,42,74,0.28); }
         .chat-header { background: ${T.ink}; color: ${T.paper}; padding: 12px 16px; font-family: var(--font-display); font-size: 15px; display: flex; align-items: center; gap: 8px; }
         .chat-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
@@ -4596,6 +4613,7 @@ function AppShell({ routeTestId }) {
           .option-row { padding: 10px; font-size: 13.5px; }
           .chat-panel { right: 10px; left: 10px; width: auto; bottom: 78px; }
           .chat-fab { right: 14px; bottom: 14px; }
+          .whatsapp-fab { left: 14px; bottom: 14px; width: 48px; height: 48px; }
           .notif-panel { right: 10px; left: 10px; width: auto; }
           .role-toggle { flex-direction: column; }
           .role-toggle-btn { border-right: none; border-bottom: 1px solid ${T.line}; }
@@ -4751,6 +4769,8 @@ function AppShell({ routeTestId }) {
       )}
 
       <SiteFooter />
+
+      <WhatsAppFloatButton />
 
       <ChatWidget session={session} />
 
