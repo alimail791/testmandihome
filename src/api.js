@@ -94,6 +94,8 @@ export const api = {
   updateAccount: (payload) => request("/api/auth/update-account", { method: "POST", body: payload }).then((data) => { setTokens(data); return data; }),
   verifyEmail: (uid, token) => request("/api/auth/verify-email", { method: "POST", body: { uid, token }, auth: false }),
   resendVerification: () => request("/api/auth/resend-verification", { method: "POST" }),
+  verifyOtp: (otp) => request("/api/auth/verify-otp", { method: "POST", body: { otp } }),
+  resendOtp: () => request("/api/auth/resend-otp", { method: "POST" }),
   forgotPassword: (email) => request("/api/auth/forgot-password", { method: "POST", body: { email }, auth: false }),
   resetPassword: (uid, token, newPassword) => request("/api/auth/reset-password", { method: "POST", body: { uid, token, newPassword }, auth: false }),
 

@@ -291,34 +291,17 @@ function SectionLabel({ eyebrow, title, right }) {
 /* Auth — registration & login                                            */
 /* ---------------------------------------------------------------------- */
 function VerifyEmailBanner() {
-  const [sent, setSent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [emailConfigured, setEmailConfigured] = useState(true);
-
-  const resend = async () => {
-    setSending(true);
-    try {
-      const data = await api.resendVerification();
-      setEmailConfigured(data.emailConfigured !== false);
-      setSent(true);
-    } catch (e) { /* stays unsent, button remains clickable */ }
-    setSending(false);
-  };
+  const [otpModalOpen, setOtpModalOpen] = useState(false);
 
   return (
     <div className="verify-banner">
       <ShieldCheck size={14} />
-      <span>
-        {sent
-          ? (emailConfigured
-              ? "Verification email sent — check your inbox for the link."
-              : "Verification link generated — check your backend terminal for the simulated email and open the link.")
-          : "Please verify your email address."}
-      </span>
-      {!sent && (
-        <button className="link-btn" style={{ color: T.ink, textDecoration: "underline" }} disabled={sending} onClick={resend}>
-          {sending ? "Sending…" : "Resend email"}
-        </button>
+      <span>Please verify your email address.</span>
+      <button className="link-btn" style={{ color: T.ink, textDecoration: "underline" }} onClick={() => setOtpModalOpen(true)}>
+        Enter verification code
+      </button>
+      {otpModalOpen && (
+        <OtpVerifyModal onClose={() => setOtpModalOpen(false)} onDone={() => setOtpModalOpen(false)} />
       )}
     </div>
   );
@@ -410,6 +393,99 @@ function AuthActionModal({ action, onDone }) {
                 {submitting ? <Loader2 size={15} className="spin" /> : "Set new password"}
               </button>
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Inline OTP verification — shown right after registration, or whenever a
+// signed-in but unverified user wants to verify. No email client / link
+// needed: the 6-digit code is entered right here.
+function OtpVerifyModal({ onClose, onDone }) {
+  const [otp, setOtp] = useState("");
+  const [status, setStatus] = useState("form"); // form | submitting | success
+  const [errorMsg, setErrorMsg] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resentMsg, setResentMsg] = useState("");
+
+  const submit = async () => {
+    const code = otp.trim();
+    if (!/^\d{6}$/.test(code)) { setErrorMsg("Enter the 6-digit code from your email."); return; }
+    setErrorMsg("");
+    setStatus("submitting");
+    try {
+      await api.verifyOtp(code);
+      setStatus("success");
+    } catch (err) {
+      setErrorMsg(err.message || "Incorrect code — please try again.");
+      setStatus("form");
+    }
+  };
+
+  const resend = async () => {
+    setResending(true);
+    setResentMsg("");
+    try {
+      const data = await api.resendOtp();
+      setResentMsg(data.emailConfigured === false
+        ? "New code generated — check your backend terminal for the simulated email."
+        : "New code sent — check your inbox.");
+    } catch (err) {
+      setErrorMsg(err.message || "Couldn't resend the code — please try again.");
+    } finally {
+      setResending(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card" style={{ maxWidth: 400 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderBottom: `1px solid ${T.line}` }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: T.ink }}>Verify your email</div>
+          <button className="icon-btn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="modal-body" style={{ textAlign: status === "success" ? "center" : "left" }}>
+          {status === "success" ? (
+            <>
+              <CheckCircle2 size={36} color={T.green} style={{ margin: "10px auto 12px" }} />
+              <div style={{ fontSize: 14, color: T.ink, marginBottom: 16 }}>Your email is verified.</div>
+              <button className="btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={onDone}>Continue to TestMandi</button>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 13.5, color: T.muted, marginBottom: 14 }}>
+                We've emailed a 6-digit code to verify your account. Enter it below.
+              </div>
+              <label className="field-label">Verification code
+                <input
+                  className="field-input"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(e) => e.key === "Enter" && submit()}
+                  placeholder="000000"
+                  style={{ fontSize: 22, letterSpacing: 8, textAlign: "center" }}
+                  autoFocus
+                />
+              </label>
+              {errorMsg && <div style={{ color: T.red, fontSize: 12.5, marginTop: 8 }}>{errorMsg}</div>}
+              {resentMsg && <div style={{ color: T.green, fontSize: 12.5, marginTop: 8 }}>{resentMsg}</div>}
+              <button
+                className="btn-primary"
+                style={{ width: "100%", justifyContent: "center", marginTop: 16, opacity: status === "submitting" ? 0.6 : 1 }}
+                disabled={status === "submitting"}
+                onClick={submit}
+              >
+                {status === "submitting" ? <Loader2 size={15} className="spin" /> : "Verify"}
+              </button>
+              <div style={{ textAlign: "center", marginTop: 12, display: "flex", justifyContent: "center", gap: 14, fontSize: 12.5 }}>
+                <button className="link-btn" disabled={resending} onClick={resend}>{resending ? "Sending…" : "Resend code"}</button>
+                <button className="link-btn" onClick={onClose}>I'll do this later</button>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -4049,6 +4125,7 @@ function AppShell({ routeTestId }) {
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [session, setSession] = useState(null); // {role, name, email, phone, businessName}
   const [authModal, setAuthModal] = useState(null); // null | {mode, role}
+  const [showPostRegisterOtp, setShowPostRegisterOtp] = useState(false);
   const [urlReferralCode] = useState(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("ref") || "";
@@ -4194,6 +4271,7 @@ function AppShell({ routeTestId }) {
       upsertLocalUser(user);
       setSession(user);
       setAuthModal(null);
+      setShowPostRegisterOtp(true); // prompt for the emailed code right away
       if (user.role === requiredRoleForCheckoutKind(pendingCheckoutKind) && pendingCheckoutTest) {
         setCheckoutTest(pendingCheckoutTest); setCheckoutKind(pendingCheckoutKind); setPendingCheckoutTest(null);
       }
@@ -4775,6 +4853,13 @@ function AppShell({ routeTestId }) {
       <ChatWidget session={session} />
 
       {authAction && <AuthActionModal action={authAction} onDone={clearAuthAction} />}
+
+      {showPostRegisterOtp && (
+        <OtpVerifyModal
+          onClose={() => setShowPostRegisterOtp(false)}
+          onDone={() => setShowPostRegisterOtp(false)}
+        />
+      )}
 
       {authModal && (
         <AuthModal
