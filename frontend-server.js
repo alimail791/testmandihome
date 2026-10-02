@@ -58,9 +58,30 @@ function baseTemplate() {
   return fs.readFileSync(path.join(DIST_DIR, "index.html"), "utf8");
 }
 
+// Pulls the real, distinct topic tags out of a test's own question bank
+// (e.g. "Genetics", "Kinematics", "Straight Lines") instead of relying on
+// the short hand-written one-liner alone. This is what makes each test
+// page's crawlable content genuinely different from the next one, rather
+// than 50 pages that read as the same template with the exam name swapped.
+function extractTopics(test) {
+  const seen = new Set();
+  const topics = [];
+  for (const q of test.questions || []) {
+    const t = (q.topic || "").trim();
+    if (t && !seen.has(t)) { seen.add(t); topics.push(t); }
+  }
+  return topics;
+}
+
 function renderTestPageHtml(template, test, origin) {
+  const topics = extractTopics(test);
+  const questionCount = test.questions?.length || 0;
+  const baseDescription = test.description || `Practice test: ${test.title}.`;
+  const description = (topics.length
+    ? `${baseDescription} Covers ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? " and more" : ""} — ${questionCount} questions, instant score report with topic-wise breakdown on TestMandi.`
+    : `${baseDescription} ${questionCount} questions, ${test.duration || "timed"} — instant score report on TestMandi.`
+  ).slice(0, 300);
   const title = `${test.title} — TestMandi`;
-  const description = (test.description || `Practice test: ${test.title}. ${test.questions?.length || 0} questions, ${test.duration || "timed"} — instant score report on TestMandi.`).slice(0, 300);
   const url = `${origin}/tests/${test.id}/${slugify(test.title)}`;
   const image = `${origin}/og-image.png`;
 
@@ -80,12 +101,16 @@ function renderTestPageHtml(template, test, origin) {
   }
 
   // Real, crawlable visible content — no test questions/answers included,
-  // just the same summary a shopper sees on the card before buying.
+  // just the same summary a shopper sees on the card before buying, plus
+  // the real topic list pulled from the question bank so each page reads
+  // as genuinely distinct content rather than one template with the exam
+  // name swapped in.
   const crawlableBlock = `
     <div id="prerendered-seo-content">
       <h1>${escapeHtml(test.title)}</h1>
       <p>${escapeHtml(description)}</p>
-      <p>Category: ${escapeHtml(test.category || "General")} · Price: ₹${escapeHtml(test.price)} · Duration: ${escapeHtml(test.duration || "N/A")} minutes</p>
+      <p>Category: ${escapeHtml(test.category || "General")} · Price: ₹${escapeHtml(test.price)} · Duration: ${escapeHtml(test.duration || "N/A")} minutes · ${escapeHtml(questionCount)} questions</p>
+      ${topics.length ? `<p>Topics covered: ${topics.map(escapeHtml).join(", ")}</p>` : ""}
       ${test.sellerName ? `<p>By ${escapeHtml(test.sellerName)}</p>` : ""}
     </div>`;
   html = html.replace('<div id="root"></div>', `<div id="root">${crawlableBlock}</div>`);
