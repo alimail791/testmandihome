@@ -147,10 +147,22 @@ app.use(async (req, res, next) => {
 });
 
 // Normal static file serving — identical behavior to `serve -s dist`: serve
-// real files as-is, and fall back to index.html for any client-side route.
+// real files as-is.
 app.use(express.static(DIST_DIR, { extensions: [] }));
+
+// SPA fallback for anything express.static didn't already serve. Only the
+// app's actual two URL shapes ("/" and "/tests/:id/:slug") are real pages,
+// so only those get a 200 — everything else (bad links, bot probes like
+// /.docker/secrets.json or /wp-admin) gets a real 404 instead of silently
+// pretending to be a valid page. A 200 on junk paths is a "soft 404" signal
+// that can hurt how much Google trusts the rest of the site's status codes.
+const KNOWN_APP_PATH = /^\/(tests\/[^/]+(\/.*)?)?$/;
 app.use((req, res) => {
-  res.sendFile(path.join(DIST_DIR, "index.html"));
+  const indexHtml = path.join(DIST_DIR, "index.html");
+  if (KNOWN_APP_PATH.test(req.path)) {
+    return res.sendFile(indexHtml);
+  }
+  res.status(404).sendFile(indexHtml);
 });
 
 app.listen(PORT, () => {
