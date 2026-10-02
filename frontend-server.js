@@ -58,24 +58,20 @@ function baseTemplate() {
   return fs.readFileSync(path.join(DIST_DIR, "index.html"), "utf8");
 }
 
-// Pulls the real, distinct topic tags out of a test's own question bank
-// (e.g. "Genetics", "Kinematics", "Straight Lines") instead of relying on
-// the short hand-written one-liner alone. This is what makes each test
-// page's crawlable content genuinely different from the next one, rather
-// than 50 pages that read as the same template with the exam name swapped.
+// The public /api/tests endpoint no longer ships the real question bank
+// (it strips `questions` to keep correct answers from being scraped — see
+// testmandiserver's `publicTest()`); it returns the distinct topic tags and
+// question count pre-computed instead, as `test.topics` / `test.questionCount`.
+// This is what makes each test page's crawlable content genuinely different
+// from the next one, rather than 50 pages that read as the same template
+// with the exam name swapped.
 function extractTopics(test) {
-  const seen = new Set();
-  const topics = [];
-  for (const q of test.questions || []) {
-    const t = (q.topic || "").trim();
-    if (t && !seen.has(t)) { seen.add(t); topics.push(t); }
-  }
-  return topics;
+  return Array.isArray(test.topics) ? test.topics : [];
 }
 
 function renderTestPageHtml(template, test, origin) {
   const topics = extractTopics(test);
-  const questionCount = test.questions?.length || 0;
+  const questionCount = test.questionCount ?? test.questions?.length ?? 0;
   const baseDescription = test.description || `Practice test: ${test.title}.`;
   const description = (topics.length
     ? `${baseDescription} Covers ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? " and more" : ""} — ${questionCount} questions, instant score report with topic-wise breakdown on TestMandi.`

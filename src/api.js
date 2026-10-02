@@ -107,6 +107,11 @@ export const api = {
   // ---- tests ----
   getTests: () => request("/api/tests", { auth: false }),
   getMyTests: () => request("/api/tests/mine"),
+  // Full question content (with correct answers) for one test — only
+  // returned if the logged-in user actually has access to it. Used right
+  // when someone starts/resumes an attempt or reviews a completed one,
+  // never as part of the public test list.
+  getTestFull: (id) => request(`/api/tests/${id}/full`),
   createTest: (draft) => request("/api/tests", { method: "POST", body: draft }),
   deleteTest: (id) => request(`/api/tests/${id}`, { method: "DELETE" }),
   rateTest: (testId, value, reviewText) => request(`/api/tests/${testId}/rate`, { method: "POST", body: { value, reviewText } }),

@@ -991,7 +991,7 @@ function ShareMenu({ test, variant }) {
 
   const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/tests/${test.id}/${slugify(test.title)}`;
   const shareText = variant === "seller"
-    ? `I just listed "${test.title}" on TestMandi — ${test.questions.length} questions, ₹${test.price}. Try it here: ${shareUrl}`
+    ? `I just listed "${test.title}" on TestMandi — ${test.questionCount ?? test.questions?.length ?? 0} questions, ₹${test.price}. Try it here: ${shareUrl}`
     : `Try this "${test.title}" MCQ test on TestMandi and see how you score: ${shareUrl}`;
 
   const copyLink = async () => {
@@ -1082,7 +1082,7 @@ function TestCard({ test, purchased, onBuy, onOpenLearning, wishlisted, onToggle
         </h3>
         <p style={{ fontSize: 13.5, color: T.muted, margin: "0 0 10px", lineHeight: 1.5 }}>{test.description}</p>
         <div style={{ fontSize: 12.5, color: T.inkSoft, display: "flex", gap: 14, fontFamily: "var(--font-mono)" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><ClipboardList size={13} /> {test.questions.length} Qs</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><ClipboardList size={13} /> {test.questionCount ?? test.questions?.length ?? 0} Qs</span>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={13} /> {test.duration} min</span>
         </div>
         <div style={{ fontSize: 12.5, color: T.muted, marginTop: 8 }}>by <strong style={{ color: T.ink }}>{test.sellerName}</strong></div>
@@ -2251,7 +2251,7 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
                   )}
                 </div>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 16.5, color: T.ink }}>{test.title}</div>
-                <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{test.questions.length} Qs · {test.duration} min · ₹{test.price}</div>
+                <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{test.questionCount ?? test.questions?.length ?? 0} Qs · {test.duration} min · ₹{test.price}</div>
               </div>
               <div className="ledger-figures">
                 <div><div className="fig-label">Sold</div><div className="fig-value">{units}</div></div>
@@ -2792,7 +2792,7 @@ function ReportView({ test, attempt, onRate, onBack, history, percentile, allTes
                 <div style={{ padding: "14px 16px" }}>
                   <Stamp>{t.category}</Stamp>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: T.ink, margin: "8px 0 4px" }}>{t.title}</div>
-                  <div style={{ fontSize: 12, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questions.length} Qs · ₹{t.price}</div>
+                  <div style={{ fontSize: 12, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questionCount ?? t.questions?.length ?? 0} Qs · ₹{t.price}</div>
                 </div>
               </div>
             ))}
@@ -3008,7 +3008,7 @@ function ProgressDashboard({ attempts }) {
 }
 
 
-function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin, percentileByAttemptId }) {
+function MyLearning({ tests, fullTests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin, percentileByAttemptId }) {
   const [tab, setTab] = useState("tests"); // "tests" | "progress"
   const myTests = tests.filter((t) => purchasedIds.has(t.id));
 
@@ -3031,13 +3031,14 @@ function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, ac
   }
 
   if (activeTestId) {
-    const test = tests.find((t) => t.id === activeTestId);
+    const test = fullTests?.[activeTestId] || tests.find((t) => t.id === activeTestId);
+    if (!test?.questions) return <div style={{ padding: "26px 28px 40px", color: T.muted, fontSize: 13.5 }}>Loading…</div>;
     return <TestRunner test={test} onSubmit={onSubmitAttempt} onExit={onExitRunner} />;
   }
 
   if (reportAttemptId) {
     const attempt = attempts.find((a) => a.id === reportAttemptId);
-    const test = tests.find((t) => t.id === attempt.testId);
+    const test = fullTests?.[attempt.testId] || tests.find((t) => t.id === attempt.testId);
     const history = attempts.filter((a) => a.testId === attempt.testId);
     return <ReportView test={test} attempt={attempt} onRate={(n, text) => onRate(attempt.id, attempt.testId, n, text)} onBack={clearReport} history={history} percentile={percentileByAttemptId?.[attempt.id]} allTests={tests} />;
   }
@@ -3094,7 +3095,7 @@ function MyLearning({ tests, purchasedIds, attempts, onStart, onExitToMarket, ac
                   <div style={{ padding: "16px 18px 14px" }}>
                     <Stamp>{t.category}</Stamp>
                     <h3 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: T.ink, margin: "10px 0 6px" }}>{t.title}</h3>
-                    <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questions.length} Qs · {t.duration} min</div>
+                    <div style={{ fontSize: 12.5, color: T.muted, fontFamily: "var(--font-mono)" }}>{t.questionCount ?? t.questions?.length ?? 0} Qs · {t.duration} min</div>
                     {best && (
                       <div style={{ marginTop: 10, fontSize: 13, color: T.ink }}>
                         Best score: <strong style={{ color: T.green }}>{best.score}/{best.total}</strong>
@@ -4093,6 +4094,17 @@ function AppShell({ routeTestId }) {
   };
   const [activeTestId, setActiveTestId] = useState(null);
   const [activeScheduledTestId, setActiveScheduledTestId] = useState(null);
+  // The public `tests` list no longer carries real question content (see
+  // GET /api/tests on the server) — only a fetched-on-demand, access-gated
+  // copy does. Keyed by test id, filled in right before a buyer starts or
+  // reviews an attempt.
+  const [fullTests, setFullTests] = useState({});
+  const ensureFullTest = async (testId) => {
+    if (fullTests[testId]) return fullTests[testId];
+    const { test } = await api.getTestFull(testId);
+    setFullTests((m) => ({ ...m, [testId]: test }));
+    return test;
+  };
   const [scheduledTests, setScheduledTests] = useState([]);
   const [allAccessPasses, setAllAccessPasses] = useState([]);
   const [myAccessGrants, setMyAccessGrants] = useState([]);
@@ -4162,7 +4174,7 @@ function AppShell({ routeTestId }) {
 
     if (sharedItem) {
       title = `${sharedItem.title} — ₹${sharedItem.price} | TestMandi`;
-      description = (sharedItem.description || `Practice test on TestMandi with ${sharedItem.questions?.length || sharedTest ? sharedItem.questions.length : ""} questions.`).slice(0, 160);
+      description = (sharedItem.description || `Practice test on TestMandi with ${sharedItem.questionCount ?? sharedItem.questions?.length ?? ""} questions.`).slice(0, 160);
     } else if (role === "seller") { title = "Seller Studio — TestMandi"; description = "Create and sell MCQ practice tests on TestMandi."; }
     else if (role === "learning") { title = "My Learning — TestMandi"; noindex = true; }
     else if (role === "ads") { title = "Ads Studio — TestMandi"; description = "Advertise on TestMandi's exam-prep marketplace."; }
@@ -4398,7 +4410,8 @@ function AppShell({ routeTestId }) {
     setMyCoupons((c) => c.filter((x) => x.id !== id));
   };
 
-  const startLiveTest = (scheduledTestId, testId) => {
+  const startLiveTest = async (scheduledTestId, testId) => {
+    await ensureFullTest(testId);
     setActiveScheduledTestId(scheduledTestId);
     setActiveTestId(testId);
     setRole("learning");
@@ -4792,9 +4805,10 @@ function AppShell({ routeTestId }) {
       {role === "learning" && (
         <MyLearning
           tests={tests}
+          fullTests={fullTests}
           purchasedIds={purchasedIds}
           attempts={attempts}
-          onStart={(id) => setActiveTestId(id)}
+          onStart={async (id) => { await ensureFullTest(id); setActiveTestId(id); }}
           onExitToMarket={() => setRole("marketplace")}
           activeTestId={activeTestId}
           testState={null}
@@ -4802,7 +4816,11 @@ function AppShell({ routeTestId }) {
           onExitRunner={() => setActiveTestId(null)}
           reportAttemptId={reportAttemptId}
           onRate={rateAttempt}
-          onOpenReport={(id) => setReportAttemptId(id)}
+          onOpenReport={async (id) => {
+            const attempt = attempts.find((a) => a.id === id);
+            if (attempt) await ensureFullTest(attempt.testId);
+            setReportAttemptId(id);
+          }}
           clearReport={() => setReportAttemptId(null)}
           session={session}
           onRequireLogin={requireLoginFor}
