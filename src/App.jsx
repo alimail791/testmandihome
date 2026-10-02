@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { api } from "./api.js";
@@ -11,9 +11,15 @@ import {
   Share2, Copy, Bell, Gift, Timer, Megaphone, Check, Sparkles, ShieldOff, Package,
   HelpCircle, Download, BarChart3, Heart, Tag, Mail, Phone, FileText,
 } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-} from "recharts";
+
+// recharts (and the d3 internals it pulls in) is a meaningful share of the
+// app's total JS, but only a handful of views ever render a chart. Loading
+// it as its own chunk, fetched on demand, keeps it off the critical path for
+// every visitor who's just browsing the marketplace. See src/charts.jsx.
+const TrendBarChart = lazy(() => import("./charts.jsx").then((m) => ({ default: m.TrendBarChart })));
+const TopicBreakdownChart = lazy(() => import("./charts.jsx").then((m) => ({ default: m.TopicBreakdownChart })));
+const AccuracyBarChart = lazy(() => import("./charts.jsx").then((m) => ({ default: m.AccuracyBarChart })));
+const ChartFallback = ({ height = 160 }) => <div style={{ height }} />;
 
 /* ---------------------------------------------------------------------- */
 /* Design tokens                                                          */
@@ -2104,21 +2110,9 @@ function TestAnalyticsView({ testId, testTitle, onBack }) {
             <>
               <SectionLabel eyebrow="Focus areas" title="Hardest questions (lowest accuracy first)" />
               <div style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 20 }}>
-                <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 34)}>
-                  <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={T.line} horizontal={false} />
-                    <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
-                    <YAxis type="category" dataKey="label" width={40} tick={{ fontSize: 11.5, fontFamily: "var(--font-mono)", fill: T.ink }} />
-                    <Tooltip
-                      contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}`, maxWidth: 260 }}
-                      formatter={(value) => [`${value}%`, "Accuracy"]}
-                      labelFormatter={(label, payload) => payload?.[0]?.payload?.fullText || label}
-                    />
-                    <Bar dataKey="Accuracy" radius={[0, 4, 4, 0]}>
-                      {chartData.map((d, i) => <Cell key={i} fill={d.Accuracy < 40 ? T.red : d.Accuracy < 70 ? T.saffronDeep : T.green} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<ChartFallback height={Math.max(160, chartData.length * 34)} />}>
+                  <AccuracyBarChart T={T} data={chartData} />
+                </Suspense>
               </div>
               <div style={{ fontSize: 12, color: T.muted }}>Showing the {chartData.length} lowest-accuracy questions with at least one answer recorded.</div>
             </>
@@ -2692,31 +2686,18 @@ function ReportView({ test, attempt, onRate, onBack, history, percentile, allTes
         <>
           <SectionLabel eyebrow="Progress" title="Your improvement over attempts" />
           <div style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 30 }}>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={trendData} margin={{ left: 0, right: 10, top: 6 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.line} vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
-                <YAxis tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} unit="%" />
-                <Tooltip contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}` }} />
-                <Bar dataKey="Accuracy" fill={T.saffronDeep} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartFallback height={160} />}>
+              <TrendBarChart T={T} data={trendData} height={160} />
+            </Suspense>
           </div>
         </>
       )}
 
       <SectionLabel eyebrow="Analysis" title="Topic-wise breakdown" />
       <div style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 30 }}>
-        <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 56)}>
-          <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.line} horizontal={false} />
-            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
-            <YAxis type="category" dataKey="topic" width={140} tick={{ fontSize: 12.5, fontFamily: "var(--font-body)", fill: T.ink }} />
-            <Tooltip contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}` }} />
-            <Bar dataKey="Correct" stackId="a" fill={T.green} radius={[0, 0, 0, 0]} />
-            <Bar dataKey="Missed" stackId="a" fill={T.red} radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <Suspense fallback={<ChartFallback height={Math.max(160, chartData.length * 56)} />}>
+          <TopicBreakdownChart T={T} data={chartData} />
+        </Suspense>
       </div>
 
       <SectionLabel eyebrow="Review" title="Question-by-question" />
@@ -2973,15 +2954,9 @@ function ProgressDashboard({ attempts }) {
         <>
           <SectionLabel eyebrow="Trend" title="Your accuracy over time" />
           <div style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 30 }}>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={trendData} margin={{ left: 0, right: 10, top: 6 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.line} vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
-                <YAxis tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} unit="%" />
-                <Tooltip contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}` }} />
-                <Bar dataKey="Accuracy" fill={T.saffronDeep} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartFallback height={180} />}>
+              <TrendBarChart T={T} data={trendData} height={180} />
+            </Suspense>
           </div>
         </>
       )}
@@ -2990,16 +2965,9 @@ function ProgressDashboard({ attempts }) {
         <>
           <SectionLabel eyebrow="Focus areas" title="Topics to revise, across every test" />
           <div style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 10px 4px", marginBottom: 10 }}>
-            <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 56)}>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.line} horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fontFamily: "var(--font-mono)", fill: T.muted }} />
-                <YAxis type="category" dataKey="topic" width={140} tick={{ fontSize: 12.5, fontFamily: "var(--font-body)", fill: T.ink }} />
-                <Tooltip contentStyle={{ fontFamily: "var(--font-body)", fontSize: 12.5, borderRadius: 6, border: `1px solid ${T.line}` }} />
-                <Bar dataKey="Correct" stackId="a" fill={T.green} radius={[0, 0, 0, 0]} />
-                <Bar dataKey="Missed" stackId="a" fill={T.red} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartFallback height={Math.max(160, chartData.length * 56)} />}>
+              <TopicBreakdownChart T={T} data={chartData} />
+            </Suspense>
           </div>
         </>
       )}
