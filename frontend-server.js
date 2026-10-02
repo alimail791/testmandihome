@@ -17,6 +17,8 @@ const API_BASE = process.env.VITE_API_BASE || "https://testmandiserver-productio
 
 const BOT_UA = /googlebot|bingbot|yandexbot|duckduckbot|baiduspider|slurp|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|applebot/i;
 
+const TESTMANDI_CONTACT_EMAIL = "info@testmandi.in";
+
 function slugify(title) {
   return (title || "test")
     .toLowerCase()
@@ -111,7 +113,63 @@ function renderTestPageHtml(template, test, origin) {
     </div>`;
   html = html.replace('<div id="root"></div>', `<div id="root">${crawlableBlock}</div>`);
 
+  // Structured data: a Product (so a price + star rating can show up directly
+  // in search results) plus a BreadcrumbList, so this reads as one specific,
+  // priced item rather than an undifferentiated page.
+  const jsonLd = { "@context": "https://schema.org", "@graph": [
+    {
+      "@type": "Product",
+      name: test.title,
+      description,
+      url,
+      image,
+      brand: { "@type": "Organization", name: test.sellerName || "TestMandi" },
+      offers: {
+        "@type": "Offer",
+        price: String(Number(test.price) || 0),
+        priceCurrency: "INR",
+        availability: "https://schema.org/InStock",
+        url,
+      },
+      ...(test.ratingCount > 0 ? {
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: Number(test.rating || 0).toFixed(1),
+          reviewCount: String(test.ratingCount),
+        },
+      } : {}),
+    },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "TestMandi", item: `${origin}/` },
+        { "@type": "ListItem", position: 2, name: test.category || "Tests", item: `${origin}/` },
+        { "@type": "ListItem", position: 3, name: test.title, item: url },
+      ],
+    },
+  ] };
+  html = html.replace("</head>", `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>\n</head>`);
+
   return html;
+}
+
+// Organization + WebSite structured data for the homepage — identifies
+// TestMandi itself as an entity to Google, separate from any one test page.
+function buildHomeJsonLd(origin) {
+  return { "@context": "https://schema.org", "@graph": [
+    {
+      "@type": "Organization",
+      name: "TestMandi",
+      url: `${origin}/`,
+      description: "India's marketplace for exam-prep MCQ practice tests — NEET, JEE, UPSC, SSC, Banking, GATE and more.",
+      email: TESTMANDI_CONTACT_EMAIL,
+    },
+    {
+      "@type": "WebSite",
+      name: "TestMandi",
+      url: `${origin}/`,
+    },
+  ] };
 }
 
 const app = express();
@@ -127,6 +185,18 @@ app.use(async (req, res, next) => {
     return res.send(cached.html);
   }
 
+  const origin = `${req.protocol}://${req.get("host")}`;
+
+  if (req.path === "/") {
+    const html = baseTemplate().replace(
+      "</head>",
+      `<script type="application/ld+json">${JSON.stringify(buildHomeJsonLd(origin))}</script>\n</head>`
+    );
+    renderCache.set(cacheKey, { html, at: Date.now() });
+    res.set("Content-Type", "text/html");
+    return res.send(html);
+  }
+
   const match = req.path.match(/^\/tests\/([^/]+)(?:\/.*)?$/);
   if (!match) return next(); // non-test routes: static index.html already has decent generic meta tags
 
@@ -135,7 +205,6 @@ app.use(async (req, res, next) => {
   const test = tests.find((t) => t.id === testId);
   if (!test) return next();
 
-  const origin = `${req.protocol}://${req.get("host")}`;
   const html = renderTestPageHtml(baseTemplate(), test, origin);
   renderCache.set(cacheKey, { html, at: Date.now() });
   res.set("Content-Type", "text/html");

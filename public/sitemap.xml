@@ -5,6 +5,14 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://testmandi.in/privacy</loc>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://testmandi.in/terms</loc>
+    <priority>0.3</priority>
+  </url>
+  <url>
     <loc>https://testmandi.in/tests/t1/neet-biology-genetics-evolution-sprint</loc>
     <priority>0.8</priority>
   </url>

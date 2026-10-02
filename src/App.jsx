@@ -9,7 +9,7 @@ import {
   LogIn, LogOut, User, Landmark, ShieldCheck, CreditCard, Smartphone,
   Building2, ArrowDownToLine, Loader2, Lock, MessageCircle, Send, Bot,
   Share2, Copy, Bell, Gift, Timer, Megaphone, Check, Sparkles, ShieldOff, Package,
-  HelpCircle, Download, BarChart3, Heart, Tag, Mail, Phone,
+  HelpCircle, Download, BarChart3, Heart, Tag, Mail, Phone, FileText,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -3931,6 +3931,185 @@ function HelpCenter() {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Legal pages — Privacy Policy & Terms of Service                        */
+/* ---------------------------------------------------------------------- */
+function LegalPage({ eyebrow, title, updated, sections }) {
+  return (
+    <div style={{ padding: "26px 28px 44px", maxWidth: 760, margin: "0 auto" }}>
+      <SectionLabel eyebrow={eyebrow} title={title} />
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 24 }}>Last updated: {updated}</div>
+      {sections.map((s, i) => (
+        <div key={i} style={{ marginBottom: 22 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 16.5, color: T.ink, marginBottom: 8 }}>{s.heading}</div>
+          {s.body.map((p, pi) => (
+            Array.isArray(p) ? (
+              <ul key={pi} style={{ margin: "0 0 10px", paddingLeft: 20, fontSize: 13.5, color: T.inkSoft, lineHeight: 1.6 }}>
+                {p.map((li, li2) => <li key={li2} style={{ marginBottom: 4 }}>{li}</li>)}
+              </ul>
+            ) : (
+              <p key={pi} style={{ margin: "0 0 10px", fontSize: 13.5, color: T.inkSoft, lineHeight: 1.6 }}>{p}</p>
+            )
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PrivacyPolicyPage() {
+  return (
+    <LegalPage
+      eyebrow="Legal"
+      title="Privacy Policy"
+      updated="2 October 2026"
+      sections={[
+        {
+          heading: "1. Who this policy covers",
+          body: [
+            "This policy explains how TestMandi (\"we\", \"us\") collects, uses, and protects the personal information of everyone who uses testmandi.in — candidates buying and attempting tests (\"buyers\"), teachers and institutes listing tests (\"sellers\"), and advertisers.",
+          ],
+        },
+        {
+          heading: "2. Information we collect",
+          body: [
+            "Directly from you, when you register or use the platform:",
+            ["Name, email address, and password (stored as a one-way hash, never in plain text)", "Role (buyer, seller, or advertiser) and, for sellers, a business name", "Test content you create, if you're a seller (questions, options, explanations, pricing)", "Answers, scores, time taken, and topic-wise performance for every test you attempt, if you're a buyer", "Ratings and written reviews you choose to submit", "Bank/payout details, if you're a seller requesting a withdrawal"],
+            "Automatically, as you use the platform:",
+            ["Basic login/session data (access and refresh tokens, stored in your browser)", "Which tests you've viewed, wishlisted, or purchased"],
+            "From third parties:",
+            ["Payment confirmation from Razorpay when you complete a purchase (we do not receive or store your card, UPI, or bank credentials — Razorpay processes and holds that directly)"],
+          ],
+        },
+        {
+          heading: "3. How we use this information",
+          body: [
+            ["To create and secure your account, and keep you signed in", "To let sellers list tests and buyers purchase and attempt them", "To calculate scores, percentiles, topic-wise breakdowns, and leaderboards", "To process payments and seller payouts", "To send account-related emails: email verification codes, password resets, purchase confirmations, and payout updates", "To respond to support requests sent via chat, WhatsApp, or email", "To detect and prevent fraud or abuse of the platform"],
+          ],
+        },
+        {
+          heading: "4. Who we share it with",
+          body: [
+            "We don't sell your personal information. We share the minimum necessary with:",
+            ["Razorpay — to process payments securely", "Our email delivery provider — to send verification codes, receipts, and notifications", "Our hosting and database providers — to run the platform itself"],
+            "A seller can see a buyer's name and review text on their own tests, but never a buyer's email, phone number, or payment details.",
+          ],
+        },
+        {
+          heading: "5. Data retention",
+          body: [
+            "We keep your account and attempt history for as long as your account is active, so you can see your own progress over time. If you ask us to delete your account, we'll delete or anonymize your personal information within a reasonable time, except where we're required to keep transaction records for legal or tax purposes.",
+          ],
+        },
+        {
+          heading: "6. Your rights",
+          body: [
+            "You can ask us to access, correct, or delete the personal information we hold about you by writing to " + TESTMANDI_CONTACT_EMAIL + ". We'll respond within a reasonable time.",
+          ],
+        },
+        {
+          heading: "7. Security",
+          body: [
+            "Passwords are hashed, not stored in plain text; payment details never touch our servers; and access to test answer keys is restricted to buyers who've actually purchased that test. No system is 100% secure, but we take reasonable technical and organizational measures to protect your information.",
+          ],
+        },
+        {
+          heading: "8. Children's privacy",
+          body: [
+            "TestMandi is used by school and competitive-exam students, some of whom may be minors. If you're under 18, please use TestMandi only with the involvement of a parent, guardian, or teacher who manages the account on your behalf.",
+          ],
+        },
+        {
+          heading: "9. Changes to this policy",
+          body: [
+            "We may update this policy as the platform evolves. We'll change the \"Last updated\" date above whenever we do.",
+          ],
+        },
+        {
+          heading: "10. Contact us",
+          body: [
+            `Questions about this policy or your data: ${TESTMANDI_CONTACT_EMAIL}`,
+          ],
+        },
+      ]}
+    />
+  );
+}
+
+function TermsOfServicePage() {
+  return (
+    <LegalPage
+      eyebrow="Legal"
+      title="Terms of Service"
+      updated="2 October 2026"
+      sections={[
+        {
+          heading: "1. Acceptance of terms",
+          body: [
+            "By creating an account or using testmandi.in, you agree to these terms. If you don't agree, please don't use the platform.",
+          ],
+        },
+        {
+          heading: "2. Accounts",
+          body: [
+            "You're responsible for keeping your login credentials secure and for all activity under your account. Buyer accounts are limited to one active session at a time; seller and advertiser accounts support multiple devices.",
+          ],
+        },
+        {
+          heading: "3. Sellers — listing and selling tests",
+          body: [
+            "Sellers are responsible for the accuracy and originality of the tests they publish — questions, options, correct answers, and explanations. By publishing a test, you confirm you own the rights to that content or have permission to sell it, and you grant TestMandi a license to host, display, and sell it on the platform.",
+            "TestMandi takes a platform share of each sale (shown to sellers in Seller Studio); the remainder is paid out to the seller on request, subject to the payout process in the app.",
+          ],
+        },
+        {
+          heading: "4. Buyers — purchasing and attempting tests",
+          body: [
+            "Once purchased, a test is licensed to you for personal practice use only — not for redistribution, resale, or sharing your access with others.",
+            "Digital test access is generally non-refundable once a test has been attempted, since the content (questions and answers) has then been delivered. If you believe a test was mis-described, mis-keyed, or not as advertised, contact us at " + TESTMANDI_CONTACT_EMAIL + " and we'll review it case by case.",
+          ],
+        },
+        {
+          heading: "5. Payments",
+          body: [
+            "All payments are processed by Razorpay. TestMandi does not store your card, UPI, or bank account details.",
+          ],
+        },
+        {
+          heading: "6. Prohibited conduct",
+          body: [
+            ["Scraping, copying, or redistributing test content without permission", "Sharing a single account/purchase across multiple people", "Attempting to manipulate scores, leaderboards, or payouts", "Uploading plagiarized or infringing test content as a seller"],
+          ],
+        },
+        {
+          heading: "7. Termination",
+          body: [
+            "We may suspend or terminate accounts that violate these terms, including tests that are blocked platform-wide for consistently low ratings.",
+          ],
+        },
+        {
+          heading: "8. Disclaimer & liability",
+          body: [
+            "Tests are created by independent third-party sellers; TestMandi does not guarantee their accuracy or exam relevance. The platform is provided \"as is,\" and TestMandi's liability is limited to the amount you paid for the specific test or service in question.",
+          ],
+        },
+        {
+          heading: "9. Changes to these terms",
+          body: [
+            "We may update these terms as the platform evolves. Continued use after a change means you accept the updated terms.",
+          ],
+        },
+        {
+          heading: "10. Contact",
+          body: [
+            `Questions about these terms: ${TESTMANDI_CONTACT_EMAIL}`,
+          ],
+        },
+      ]}
+    />
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Support chatbot — answers buyer & seller questions                     */
 /* ---------------------------------------------------------------------- */
 function ChatWidget({ session }) {
@@ -4023,7 +4202,7 @@ function WhatsAppFloatButton() {
   );
 }
 
-function SiteFooter() {
+function SiteFooter({ onNavigate }) {
   return (
     <footer
       style={{
@@ -4061,6 +4240,18 @@ function SiteFooter() {
       >
         <Mail size={16} /> {TESTMANDI_PARTNERSHIPS_EMAIL}
       </a>
+      <button
+        onClick={() => onNavigate?.("privacy")}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#1c2b4a", background: "none", border: "none", cursor: "pointer", font: "inherit", fontWeight: 600, padding: 0 }}
+      >
+        <ShieldCheck size={16} /> Privacy Policy
+      </button>
+      <button
+        onClick={() => onNavigate?.("terms")}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#1c2b4a", background: "none", border: "none", cursor: "pointer", font: "inherit", fontWeight: 600, padding: 0 }}
+      >
+        <FileText size={16} /> Terms of Service
+      </button>
       <span style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
         © {new Date().getFullYear()} TestMandi. All rights reserved.
       </span>
@@ -4071,8 +4262,8 @@ function SiteFooter() {
 /* ---------------------------------------------------------------------- */
 /* App shell                                                              */
 /* ---------------------------------------------------------------------- */
-function AppShell({ routeTestId }) {
-  const [role, setRole] = useState("marketplace");
+function AppShell({ routeTestId, routeRole }) {
+  const [role, setRole] = useState(routeRole || "marketplace");
   const [tests, setTests] = useState(seedTests());
   const [bundles, setBundles] = useState([]);
   const [ads, setAds] = useState([]);
@@ -4179,6 +4370,8 @@ function AppShell({ routeTestId }) {
     else if (role === "learning") { title = "My Learning — TestMandi"; noindex = true; }
     else if (role === "ads") { title = "Ads Studio — TestMandi"; description = "Advertise on TestMandi's exam-prep marketplace."; }
     else if (role === "help") { title = "Help Center — TestMandi"; description = "Guides for buyers, sellers, and advertisers on TestMandi."; }
+    else if (role === "privacy") { title = "Privacy Policy — TestMandi"; description = "How TestMandi collects, uses, and protects your personal information."; }
+    else if (role === "terms") { title = "Terms of Service — TestMandi"; description = "The terms that govern buying, selling, and advertising on TestMandi."; }
     else if (role === "admin") { title = "Admin — TestMandi"; noindex = true; }
 
     document.title = title;
@@ -4837,6 +5030,8 @@ function AppShell({ routeTestId }) {
         />
       )}
       {role === "help" && <HelpCenter />}
+      {role === "privacy" && <PrivacyPolicyPage />}
+      {role === "terms" && <TermsOfServicePage />}
       {role === "admin" && session?.role === "admin" && (
         <Admin
           tests={adminData.tests}
@@ -4864,7 +5059,7 @@ function AppShell({ routeTestId }) {
       </>
       )}
 
-      <SiteFooter />
+      <SiteFooter onNavigate={setRole} />
 
       <WhatsAppFloatButton />
 
@@ -4924,6 +5119,11 @@ export default function App() {
       <Routes>
         <Route path="/tests/:id" element={<TestRoute />} />
         <Route path="/tests/:id/:slug" element={<TestRoute />} />
+        {/* Real, directly-linkable URLs — needed so Google can index them and
+            so they can be submitted as the required policy links in Google
+            Ads account/campaign setup, not just reachable as an in-app tab. */}
+        <Route path="/privacy" element={<AppShell routeRole="privacy" />} />
+        <Route path="/terms" element={<AppShell routeRole="terms" />} />
         <Route path="*" element={<AppShell />} />
       </Routes>
     </BrowserRouter>

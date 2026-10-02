@@ -36,6 +36,8 @@ async function generateSitemap() {
 
   const staticUrls = [
     { loc: `${SITE_URL}/`, priority: '1.0' },
+    { loc: `${SITE_URL}/privacy`, priority: '0.3' },
+    { loc: `${SITE_URL}/terms`, priority: '0.3' },
   ];
 
   const testUrls = tests.map((t) => ({
