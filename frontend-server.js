@@ -123,13 +123,34 @@ function renderTestPageHtml(template, test, origin) {
       description,
       url,
       image,
-      brand: { "@type": "Organization", name: test.sellerName || "TestMandi" },
+      brand: { "@type": "Brand", name: test.sellerName || "TestMandi" },
       offers: {
         "@type": "Offer",
         price: String(Number(test.price) || 0),
         priceCurrency: "INR",
         availability: "https://schema.org/InStock",
         url,
+        // Digital good, delivered instantly inside the account — no physical
+        // shipment, so handling + transit time are both 0 days and the rate is
+        // free. Google's Merchant listing checks want this field present even
+        // for a non-shipped digital product.
+        shippingDetails: {
+          "@type": "OfferShippingDetails",
+          shippingRate: { "@type": "MonetaryAmount", value: "0", currency: "INR" },
+          shippingDestination: { "@type": "DefinedRegion", addressCountry: "IN" },
+          deliveryTime: {
+            "@type": "ShippingDeliveryTime",
+            handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+            transitTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+          },
+        },
+        // A purchased test unlocks access immediately and isn't a returnable
+        // good, so the policy is "no returns" rather than a window of days.
+        hasMerchantReturnPolicy: {
+          "@type": "MerchantReturnPolicy",
+          applicableCountry: "IN",
+          returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+        },
       },
       ...(test.ratingCount > 0 ? {
         aggregateRating: {
