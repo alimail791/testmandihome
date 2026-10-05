@@ -5054,6 +5054,10 @@ function AppShell({ routeTestId, routeRole }) {
         />
       )}
 
+      {session && (session.role === "buyer" || session.role === "seller") && session.emailVerified !== false && (
+        <ReferEarnPopup key={session.email} session={session} />
+      )}
+
       {checkoutTest && session && (
         <CheckoutModal
           kind={checkoutKind}
@@ -5067,6 +5071,75 @@ function AppShell({ routeTestId, routeRole }) {
           onSuccess={handleCheckoutSuccess}
         />
       )}
+    </div>
+  );
+}
+
+// Once-a-day "Refer & earn" nudge for logged-in buyers and sellers. Shown at
+// most once per calendar day per account (tracked in localStorage; if storage
+// is unavailable it simply shows once per page load).
+function ReferEarnPopup({ session }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const isSeller = session.role === "seller";
+  const storageKey = `tm_refer_popup_${session.email}`;
+
+  useEffect(() => {
+    let today = "";
+    try { today = new Date().toDateString(); } catch (e) { /* ignore */ }
+    let last = null;
+    try { last = localStorage.getItem(storageKey); } catch (e) { /* storage blocked */ }
+    if (last === today) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api.getMyReferrals().then((d) => {
+        if (cancelled) return;
+        setData(d);
+        setOpen(true);
+        try { localStorage.setItem(storageKey, today); } catch (e) { /* storage blocked */ }
+      }).catch(() => {});
+    }, 2500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [storageKey]);
+
+  if (!open || !data) return null;
+  const code = data.referralCode || session.referralCode;
+  if (!code) return null;
+  const shareUrl = `${window.location.origin}/?ref=${code}`;
+  const shareText = isSeller
+    ? `Sell your MCQ tests on TestMandi! Use my code ${code} when you register as a seller, or refer a student to buy their first test: ${shareUrl}`
+    : `Join me on TestMandi and try MCQ tests for competitive exams! Use my code ${code} when you sign up: ${shareUrl}`;
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); } catch (e) { /* clipboard unavailable */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={() => setOpen(false)}>
+      <div className="modal-card" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Refer and earn">
+        <div className="modal-body" style={{ textAlign: "center", position: "relative" }}>
+          <button aria-label="Close" onClick={() => setOpen(false)} style={{ position: "absolute", top: 10, right: 10, background: "none", border: "none", cursor: "pointer", color: T.muted }}><X size={18} /></button>
+          <div style={{ width: 52, height: 52, borderRadius: 26, background: "rgba(232,163,61,0.18)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+            <Gift size={26} color={T.saffronDeep} />
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 21, color: T.ink, marginBottom: 6 }}>Refer & earn on TestMandi</div>
+          <div style={{ fontSize: 13.5, color: T.inkSoft, lineHeight: 1.5, marginBottom: 14 }}>
+            {isSeller
+              ? "Refer another seller or a student — earn ₹200 straight to your payout balance when they publish their first test or make their first purchase."
+              : "Share your code — when a friend buys their first test, you get 50% off your next one. More friends, more discounts!"}
+          </div>
+          <div className="referral-code-box" style={{ margin: "0 auto 14px", display: "inline-block" }}>{code}</div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <button className="btn-primary" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank")}>
+              <MessageCircle size={14} /> Share on WhatsApp
+            </button>
+            <button className="btn-outline" onClick={copyLink}>{copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}</button>
+          </div>
+          <button onClick={() => setOpen(false)} style={{ marginTop: 14, background: "none", border: "none", color: T.muted, fontSize: 12.5, cursor: "pointer" }}>Maybe later</button>
+        </div>
+      </div>
     </div>
   );
 }
