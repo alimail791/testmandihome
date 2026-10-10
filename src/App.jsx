@@ -1270,6 +1270,8 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState("rating");
+  const [page, setPage] = useState(1);
+  const gridTopRef = useRef(null);
 
   const now = Date.now();
   const activeAds = (ads || []).filter((a) => a.endTs > now);
@@ -1290,6 +1292,25 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
     if (sort === "price-high") list = [...list].sort((a, b) => b.price - a.price);
     return list;
   }, [tests, search, cat, sort]);
+
+  // 40 tests per page keeps the homepage fast and easy to scan.
+  const PAGE_SIZE = 40;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageTests = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, cat, sort]);
+  const goToPage = (p) => {
+    setPage(p);
+    try { gridTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { /* ignore */ }
+  };
+  const pageButtons = (() => {
+    const out = [];
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1) out.push(p);
+      else if (out[out.length - 1] !== "…") out.push("…");
+    }
+    return out;
+  })();
 
   return (
     <div>
@@ -1358,8 +1379,14 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
 
         {categoryAd && <AdBanner ad={categoryAd} />}
 
+        <div ref={gridTopRef} style={{ scrollMarginTop: 12 }} />
+        {filtered.length > 0 && (
+          <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 10 }}>
+            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} tests
+          </div>
+        )}
         <div className="grid-cards">
-          {filtered.map((t) => (
+          {pageTests.map((t) => (
             <TestCard
               key={t.id}
               test={t}
@@ -1374,6 +1401,22 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
             <div style={{ color: T.muted, padding: "40px 0" }}>No tests match that search — try another category.</div>
           )}
         </div>
+
+        {totalPages > 1 && (
+          <nav aria-label="Test pages" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", alignItems: "center", marginTop: 22 }}>
+            <button className="btn-outline" disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} style={{ opacity: currentPage === 1 ? 0.5 : 1 }}>
+              <ChevronLeft size={14} /> Prev
+            </button>
+            {pageButtons.map((p, i) => p === "…" ? (
+              <span key={"e" + i} style={{ color: T.muted, padding: "0 4px" }}>…</span>
+            ) : (
+              <button key={p} onClick={() => goToPage(p)} className={`chip ${p === currentPage ? "chip-active" : ""}`} aria-current={p === currentPage ? "page" : undefined}>{p}</button>
+            ))}
+            <button className="btn-outline" disabled={currentPage === totalPages} onClick={() => goToPage(currentPage + 1)} style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}>
+              Next <ChevronRight size={14} />
+            </button>
+          </nav>
+        )}
 
         {bundles.length > 0 && (
           <>
