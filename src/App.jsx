@@ -4151,7 +4151,9 @@ function requiredRoleForCheckoutKind(kind) {
   return kind === "ad" ? "advertiser" : "buyer";
 }
 
-const TESTMANDI_WHATSAPP_NUMBER = "919003264537"; // no + or spaces, for wa.me links
+const TESTMANDI_WHATSAPP_NUMBER = "919003264537"; // no + or spaces, for wa.me links (support / AI agent)
+// The WhatsApp bot on Raise Academy's verified number: browse all tests, try free questions and buy by UPI in chat
+const TESTMANDI_BOT_NUMBER = "919443424064";
 const TESTMANDI_CONTACT_EMAIL = "info@testmandi.in";
 const TESTMANDI_PARTNERSHIPS_EMAIL = "partnerships@testmandi.in";
 
@@ -4159,11 +4161,11 @@ function WhatsAppFloatButton() {
   return (
     <a
       className="whatsapp-fab"
-      href={`https://wa.me/${TESTMANDI_WHATSAPP_NUMBER}?text=${encodeURIComponent("Hi TestMandi, I have a question about")}`}
+      href={`https://wa.me/${TESTMANDI_BOT_NUMBER}?text=${encodeURIComponent("Hi TestMandi")}`}
       target="_blank"
       rel="noopener noreferrer"
-      title="Chat on WhatsApp"
-      aria-label="Chat on WhatsApp"
+      title="Browse and buy tests on WhatsApp"
+      aria-label="Browse and buy tests on WhatsApp"
     >
       <MessageCircle size={26} fill="#fff" />
     </a>
