@@ -4490,18 +4490,21 @@ function AppShell({ routeTestId, routeRole }) {
   // app still shows something rather than going blank.
   const [backendUnreachable, setBackendUnreachable] = useState(false);
   useEffect(() => {
-    Promise.all([api.getCategories(), api.getTests(), api.getBundles(), api.getActiveAds(), api.getSettings(), api.getScheduledTests(), api.getAllAccessPasses()])
-      .then(([catData, testData, bundleData, adData, settingsData, scheduledData, passData]) => {
-        setCategories(catData.categories);
-        setTests(testData.tests);
-        setBundles(bundleData.bundles);
-        setMarketplaceAds(adData.ads);
-        setSellerShare(settingsData.sellerSharePercent);
-        setScheduledTests(scheduledData.scheduledTests);
-        setAllAccessPasses(passData.passes);
-        setBackendUnreachable(false);
-      })
-      .catch(() => setBackendUnreachable(true));
+    // Each piece loads independently: a slow or failing request (e.g. the large
+    // tests list) must not stop categories, bundles, ads etc. from showing.
+    const loaders = [
+      api.getCategories().then((d) => setCategories(d.categories)),
+      api.getTests().then((d) => setTests(d.tests)),
+      api.getBundles().then((d) => setBundles(d.bundles)),
+      api.getActiveAds().then((d) => setMarketplaceAds(d.ads)),
+      api.getSettings().then((d) => setSellerShare(d.sellerSharePercent)),
+      api.getScheduledTests().then((d) => setScheduledTests(d.scheduledTests)),
+      api.getAllAccessPasses().then((d) => setAllAccessPasses(d.passes)),
+    ];
+    Promise.allSettled(loaders).then((results) => {
+      // Only warn that the backend is down if the core data (categories + tests) both failed.
+      setBackendUnreachable(results[0].status === "rejected" && results[1].status === "rejected");
+    });
   }, []);
 
   const requireLoginFor = (role) => openAuth(role, "login");
