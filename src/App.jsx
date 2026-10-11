@@ -1084,7 +1084,12 @@ function TestCard({ test, purchased, onBuy, onOpenLearning, wishlisted, onToggle
           </div>
         </div>
         <h3 style={{ fontFamily: "var(--font-display)", fontSize: 19, color: T.ink, margin: "10px 0 6px", lineHeight: 1.25 }}>
-          {test.title}
+          {/* A real <a href> so Google can follow from the listing to each
+              test's own page — buttons with onClick handlers aren't links to
+              a crawler, which left test pages reachable only via the sitemap. */}
+          <a href={`/tests/${test.id}/${slugify(test.title)}`} style={{ color: "inherit", textDecoration: "none" }}>
+            {test.title}
+          </a>
         </h3>
         <p style={{ fontSize: 13.5, color: T.muted, margin: "0 0 10px", lineHeight: 1.5 }}>{test.description}</p>
         <div style={{ fontSize: 12.5, color: T.inkSoft, display: "flex", gap: 14, fontFamily: "var(--font-mono)" }}>
@@ -4372,6 +4377,14 @@ function AppShell({ routeTestId, routeRole }) {
     const sharedBundle = !sharedTest && sharedItemId ? bundles.find((b) => b.id === sharedItemId) : null;
     const sharedItem = sharedTest || sharedBundle;
 
+    // On a /tests/:id page whose test hasn't loaded yet, leave the head tags
+    // exactly as they are. For crawlers, frontend-server.js already put this
+    // test's real title/description/canonical into the HTML; overwriting them
+    // here with the homepage defaults (even for a moment) is what told Google
+    // "this page is a duplicate of the homepage" whenever its renderer
+    // snapshotted the page before /api/tests came back.
+    if (sharedItemId && !sharedItem) return;
+
     let title = "TestMandi — Buy & Sell MCQ Practice Tests for NEET, JEE, UPSC, SSC & More";
     let description = "TestMandi is India's marketplace for exam-prep MCQ tests. Buy practice tests for NEET, JEE Main, UPSC, SSC, Banking, GATE, and 30+ competitive exams — or sell your own tests as a teacher or institute.";
     let noindex = false;
@@ -4401,7 +4414,9 @@ function AppShell({ routeTestId, routeRole }) {
     // which is exactly what was suppressing them from being indexed on
     // their own.
     const origin = typeof window !== "undefined" ? window.location.origin : "https://testmandi.in";
-    const canonicalUrl = sharedItem ? `${origin}/tests/${sharedItem.id}/${slugify(sharedItem.title)}` : `${origin}/`;
+    const canonicalUrl = sharedItem
+      ? `${origin}/tests/${sharedItem.id}/${slugify(sharedItem.title)}`
+      : (role === "privacy" || role === "terms") ? `${origin}/${role}` : `${origin}/`;
     let canonicalTag = document.querySelector('link[rel="canonical"]');
     if (!canonicalTag) { canonicalTag = document.createElement("link"); canonicalTag.setAttribute("rel", "canonical"); document.head.appendChild(canonicalTag); }
     canonicalTag.setAttribute("href", canonicalUrl);
