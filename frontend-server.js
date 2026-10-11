@@ -19,6 +19,12 @@ const BOT_UA = /googlebot|bingbot|yandexbot|duckduckbot|baiduspider|slurp|facebo
 
 const TESTMANDI_CONTACT_EMAIL = "info@testmandi.in";
 
+// The one canonical origin, matching sitemap.xml. Don't derive it from the
+// request: behind Railway's proxy `req.protocol` is "http", which made every
+// canonical/og:url/JSON-LD URL an http:// address that redirects to https —
+// a canonical pointing at a redirect, which Google discounts.
+const SITE_ORIGIN = process.env.SITE_ORIGIN || "https://testmandi.in";
+
 function slugify(title) {
   return (title || "test")
     .toLowerCase()
@@ -71,7 +77,46 @@ function extractTopics(test) {
   return Array.isArray(test.topics) ? test.topics : [];
 }
 
-function renderTestPageHtml(template, test, origin) {
+function testUrl(t) {
+  return `/tests/${t.id}/${slugify(t.title)}`;
+}
+
+// Plain <a href> links crawlers can follow. The SPA's own listing only has
+// onClick buttons, so without these Google could reach test pages solely
+// through the sitemap — which is why most sat in "Discovered – currently not
+// indexed". Same tests a visitor can browse; just expressed as links.
+function linkList(tests) {
+  return `<ul>${tests.map((t) => `<li><a href="${escapeHtml(testUrl(t))}">${escapeHtml(t.title)}</a></li>`).join("")}</ul>`;
+}
+
+function relatedTests(test, allTests, limit = 12) {
+  const same = allTests.filter((t) => t.id !== test.id && t.category === test.category);
+  // Start right after this test so neighbouring pages link to different sets
+  // and every test in a big category gets linked from somewhere.
+  const i = allTests.findIndex((t) => t.id === test.id);
+  const rotated = [...same.filter((t) => allTests.indexOf(t) > i), ...same.filter((t) => allTests.indexOf(t) < i)];
+  return rotated.slice(0, limit);
+}
+
+function renderHomeDirectory(allTests) {
+  const byCategory = new Map();
+  for (const t of allTests) {
+    const c = t.category || "Other";
+    if (!byCategory.has(c)) byCategory.set(c, []);
+    byCategory.get(c).push(t);
+  }
+  const sections = [...byCategory.entries()]
+    .map(([c, list]) => `<section><h2>${escapeHtml(c)} practice tests</h2>${linkList(list)}</section>`)
+    .join("");
+  return `
+    <div id="prerendered-seo-content">
+      <h1>TestMandi — MCQ practice tests for NEET, JEE, UPSC, SSC, Banking &amp; more</h1>
+      <p>Buy online MCQ practice tests and full mock tests for 30+ Indian competitive exams, with instant score reports and topic-wise breakdowns — or sell your own tests as a teacher or institute.</p>
+      <nav aria-label="All tests">${sections}</nav>
+    </div>`;
+}
+
+function renderTestPageHtml(template, test, origin, allTests = []) {
   const topics = extractTopics(test);
   const questionCount = test.questionCount ?? test.questions?.length ?? 0;
   const baseDescription = test.description || `Practice test: ${test.title}.`;
@@ -110,6 +155,11 @@ function renderTestPageHtml(template, test, origin) {
       <p>Category: ${escapeHtml(test.category || "General")} · Price: ₹${escapeHtml(test.price)} · Duration: ${escapeHtml(test.duration || "N/A")} minutes · ${escapeHtml(questionCount)} questions</p>
       ${topics.length ? `<p>Topics covered: ${topics.map(escapeHtml).join(", ")}</p>` : ""}
       ${test.sellerName ? `<p>By ${escapeHtml(test.sellerName)}</p>` : ""}
+      ${(() => {
+        const related = relatedTests(test, allTests);
+        return related.length ? `<nav aria-label="Related tests"><h2>More ${escapeHtml(test.category || "")} tests</h2>${linkList(related)}</nav>` : "";
+      })()}
+      <p><a href="/">Browse all tests on TestMandi</a></p>
     </div>`;
   html = html.replace('<div id="root"></div>', `<div id="root">${crawlableBlock}</div>`);
 
@@ -206,13 +256,16 @@ app.use(async (req, res, next) => {
     return res.send(cached.html);
   }
 
-  const origin = `${req.protocol}://${req.get("host")}`;
+  const origin = SITE_ORIGIN;
 
   if (req.path === "/") {
-    const html = baseTemplate().replace(
-      "</head>",
-      `<script type="application/ld+json">${JSON.stringify(buildHomeJsonLd(origin))}</script>\n</head>`
-    );
+    const allTests = await getAllTests();
+    const html = baseTemplate()
+      .replace(
+        "</head>",
+        `<script type="application/ld+json">${JSON.stringify(buildHomeJsonLd(origin))}</script>\n</head>`
+      )
+      .replace('<div id="root"></div>', `<div id="root">${renderHomeDirectory(allTests)}</div>`);
     renderCache.set(cacheKey, { html, at: Date.now() });
     res.set("Content-Type", "text/html");
     return res.send(html);
@@ -226,7 +279,7 @@ app.use(async (req, res, next) => {
   const test = tests.find((t) => t.id === testId);
   if (!test) return next();
 
-  const html = renderTestPageHtml(baseTemplate(), test, origin);
+  const html = renderTestPageHtml(baseTemplate(), test, origin, tests);
   renderCache.set(cacheKey, { html, at: Date.now() });
   res.set("Content-Type", "text/html");
   res.send(html);
@@ -237,12 +290,12 @@ app.use(async (req, res, next) => {
 app.use(express.static(DIST_DIR, { extensions: [] }));
 
 // SPA fallback for anything express.static didn't already serve. Only the
-// app's actual two URL shapes ("/" and "/tests/:id/:slug") are real pages,
+// app's real URL shapes ("/", "/tests/:id/:slug", "/privacy", "/terms") are pages,
 // so only those get a 200 — everything else (bad links, bot probes like
 // /.docker/secrets.json or /wp-admin) gets a real 404 instead of silently
 // pretending to be a valid page. A 200 on junk paths is a "soft 404" signal
 // that can hurt how much Google trusts the rest of the site's status codes.
-const KNOWN_APP_PATH = /^\/(tests\/[^/]+(\/.*)?)?$/;
+const KNOWN_APP_PATH = /^\/(tests\/[^/]+(\/.*)?|privacy|terms)?$/;
 app.use((req, res) => {
   const indexHtml = path.join(DIST_DIR, "index.html");
   if (KNOWN_APP_PATH.test(req.path)) {
