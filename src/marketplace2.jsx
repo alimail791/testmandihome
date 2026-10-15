@@ -1,14 +1,19 @@
 // TestMandi marketplace, TpT-style: product cards, product pages for tests
 // and teaching resources, the seller upload form for resources, and the
 // buyer's resource library. Wired into AppShell in App.jsx.
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import { api } from "./api.js";
 import { T } from "./theme.js";
 import {
   Star, Bookmark, Download, Share2, Copy, Check, X, ChevronLeft, ChevronRight, GraduationCap,
   BookOpen, Tag, FileText, Globe, School, Clock, ClipboardList, Package, Upload, Loader2, Eye,
   Trash2, Plus, Play, Layers, ImagePlus, Pencil, Search, MessageCircle, Store,
+  ShoppingCart, Lock, Gift,
 } from "lucide-react";
+
+// Cart access for any card or page: { has(item), add(item), open() }.
+// Provided by AppShell.
+export const CartContext = createContext(null);
 
 /* ---------------------------------------------------------------------- */
 /* Helpers                                                                */
@@ -123,7 +128,10 @@ function BookmarkButton({ active, onClick, size = 34, label }) {
 /* Product card                                                           */
 /* ---------------------------------------------------------------------- */
 export function ProductCard({ item, owned, wishlisted, onToggleWishlist, onOpen, onBuy, onOwnedAction }) {
+  const cart = useContext(CartContext);
   const href = itemPath(item);
+  const free = Number(item.price) === 0;
+  const inCart = !!cart?.has(item);
   const open = (e) => { e.preventDefault(); onOpen(item); };
   return (
     <article className="tpt-card">
@@ -142,10 +150,14 @@ export function ProductCard({ item, owned, wishlisted, onToggleWishlist, onOpen,
           <button type="button" className="tpt-btn tpt-btn-ghost tpt-btn-sm" onClick={onOwnedAction}>
             {item.kind === "resource" ? <><Download size={14} /> Download</> : <><Play size={14} /> Go to test</>}
           </button>
-        ) : (
+        ) : free || !cart ? (
           <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-sm" onClick={onBuy}>
-            {Number(item.price) === 0 ? "Get free" : "Buy now"}
+            {free ? "Get free" : "Buy now"}
           </button>
+        ) : inCart ? (
+          <button type="button" className="tpt-btn tpt-btn-ghost tpt-btn-sm" onClick={cart.open}><Check size={14} /> In cart</button>
+        ) : (
+          <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-sm" onClick={() => cart.add(item)}>Add to cart</button>
         )}
         {onToggleWishlist && <BookmarkButton active={wishlisted} onClick={onToggleWishlist} />}
       </div>
@@ -307,8 +319,10 @@ function PreviewModal({ item, onClose, onBuy, owned }) {
 export function ProductPage({
   item, loading, notFound, allTests, allResources, bundles, owned, purchasedBundleIds,
   wishlisted, onToggleWishlist, onBuy, onBuyBundle, onOwnedAction, onOpen, onBack, session,
-  following, onToggleFollow,
+  following, onToggleFollow, canRate, onRate,
 }) {
+  const cart = useContext(CartContext);
+  const [breakdown, setBreakdown] = useState(null);
   const [followers, setFollowers] = useState(null);
   const [reviews, setReviews] = useState(null);
   const [slot, setSlot] = useState("cover");
@@ -323,7 +337,8 @@ export function ProductPage({
     setReviews(null);
     setSlot("cover");
     const load = item.kind === "resource" ? api.getResourceReviews(item.id) : api.getTestReviews(item.id);
-    load.then((d) => setReviews(d.reviews || [])).catch(() => setReviews([]));
+    setBreakdown(null);
+    load.then((d) => { setReviews(d.reviews || []); setBreakdown(d.breakdown || null); }).catch(() => setReviews([]));
     window.scrollTo({ top: 0 });
   }, [item?.id, item?.kind]);
 
@@ -379,15 +394,25 @@ export function ProductPage({
     if (typeof n === "number") setFollowers(n);
   };
 
+  const inCart = !!cart?.has(item);
   const primary = owned ? (
     <button ref={buyRef} type="button" className="tpt-btn tpt-btn-cart tpt-btn-lg" onClick={onOwnedAction}>
       {isRes ? <><Download size={17} /> Download</> : <><Play size={17} /> Start test</>}
     </button>
-  ) : (
+  ) : free || !cart ? (
     <button ref={buyRef} type="button" className="tpt-btn tpt-btn-cart tpt-btn-lg" onClick={onBuy}>
       {free ? "Get it free" : `Buy now · ${priceLabel(item.price)}`}
     </button>
+  ) : inCart ? (
+    <button ref={buyRef} type="button" className="tpt-btn tpt-btn-ghost tpt-btn-lg" onClick={cart.open}>
+      <Check size={17} /> In cart · View cart
+    </button>
+  ) : (
+    <button ref={buyRef} type="button" className="tpt-btn tpt-btn-cart tpt-btn-lg" onClick={() => cart.add(item)}>
+      <ShoppingCart size={17} /> Add to cart
+    </button>
   );
+  const showBuyNow = !owned && !free && !!cart;
 
   const quotes = (reviews || []).filter((r) => r.text).slice(0, 2);
   const othersBlock = quotes.length > 0 ? (
@@ -457,7 +482,9 @@ export function ProductPage({
           <div className={`tpt-bigprice ${free ? "tpt-free" : ""}`}>{priceLabel(item.price)}</div>
           {primary}
           <div className="tpt-buyrow">
-            <a className="tpt-btn tpt-btn-dark" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer"><Share2 size={15} /> Share with students</a>
+            {showBuyNow
+              ? <button type="button" className="tpt-btn tpt-btn-dark" onClick={onBuy}>Buy now</button>
+              : <a className="tpt-btn tpt-btn-dark" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer"><Share2 size={15} /> Share with students</a>}
             {toggleWish ? (
               <button type="button" className="tpt-wish" aria-pressed={!!wishlisted} onClick={toggleWish}><Bookmark size={16} fill={wishlisted ? "currentColor" : "none"} /> {wishlisted ? "Saved" : "Wish list"}</button>
             ) : !session ? (
@@ -535,12 +562,18 @@ export function ProductPage({
 
       <section className="tpt-section" ref={reviewsRef} style={{ scrollMarginTop: 80 }}>
         <h2>Reviews {item.ratingCount ? <span style={{ fontSize: 15, color: T.muted, fontWeight: 400 }}>({item.ratingCount})</span> : null}</h2>
+        {item.ratingCount > 0 && <RatingSummary item={item} breakdown={breakdown} />}
+        {canRate && <RateBox kind={isRes ? "resource" : "test"} onRate={async (v, t) => {
+          await onRate(v, t);
+          const load = isRes ? api.getResourceReviews(item.id) : api.getTestReviews(item.id);
+          load.then((d) => { setReviews(d.reviews || []); setBreakdown(d.breakdown || null); }).catch(() => {});
+        }} />}
         {reviews === null ? <div style={{ color: T.muted, fontSize: 13.5 }}>Loading reviews…</div>
           : reviews.length === 0 ? <div style={{ color: T.muted, fontSize: 13.5 }}>No written reviews yet. Buyers can rate this after {isRes ? "downloading it" : "attempting it"}.</div>
           : reviews.map((r, i) => (
             <div key={i} className="tpt-review">
               <span className="tpt-stars">{[1, 2, 3, 4, 5].map((n) => <Star key={n} size={13} strokeWidth={1.5} color={T.saffronDeep} fill={n <= r.value ? T.saffronDeep : "none"} />)}</span>
-              {r.text && <div>{r.text}</div>}
+              {r.text ? <div>{r.text}</div> : <div style={{ color: T.muted, fontSize: 13 }}>Rated {r.value} out of 5</div>}
               <div className="tpt-review-who">{r.buyerName || "Buyer"} · {new Date(r.ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
             </div>
           ))}
@@ -567,13 +600,251 @@ export function ProductPage({
             <span className={`tpt-price ${free ? "tpt-free" : ""}`}>{priceLabel(item.price)}</span>
             {owned
               ? <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-sm" onClick={onOwnedAction}>{isRes ? "Download" : "Start test"}</button>
-              : <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-sm" onClick={onBuy}>{free ? "Get free" : "Buy now"}</button>}
+              : free || !cart ? <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-sm" onClick={onBuy}>{free ? "Get free" : "Buy now"}</button>
+              : inCart ? <button type="button" className="tpt-btn tpt-btn-ghost tpt-btn-sm" onClick={cart.open}><Check size={14} /> In cart</button>
+              : <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-sm" onClick={() => cart.add(item)}>Add to cart</button>}
             {toggleWish && <BookmarkButton active={wishlisted} onClick={toggleWish} />}
           </div>
         </div>
       )}
 
       {showPreview && <PreviewModal item={item} owned={owned} onBuy={onBuy} onClose={() => setShowPreview(false)} />}
+    </div>
+  );
+}
+
+function RatingSummary({ item, breakdown }) {
+  const total = breakdown ? Object.values(breakdown).reduce((a, b) => a + b, 0) : 0;
+  return (
+    <div className="tpt-ratingsum">
+      <div>
+        <div className="tpt-ratingbig">{Number(item.rating).toFixed(1)}</div>
+        <RatingLine item={item} />
+      </div>
+      {total > 0 && (
+        <div className="tpt-bars" aria-label="Rating breakdown">
+          {[5, 4, 3, 2, 1].map((n) => {
+            const pct = Math.round((breakdown[n] / total) * 100);
+            return (
+              <div key={n} className="tpt-bar">
+                <span>{n} star</span>
+                <div className="tpt-bar-track"><div style={{ width: `${pct}%` }} /></div>
+                <span className="mono">{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RateBox({ kind, onRate }) {
+  const [value, setValue] = useState(0);
+  const [text, setText] = useState("");
+  const [state, setState] = useState("idle"); // idle | saving | done | error
+  const [msg, setMsg] = useState("");
+  if (state === "done") return <div className="split-note">Thanks — your rating is posted.</div>;
+  const submit = async () => {
+    if (!value) { setMsg("Choose 1 to 5 stars."); return; }
+    setState("saving"); setMsg("");
+    try { await onRate(value, text.trim()); setState("done"); }
+    catch (err) { setState("error"); setMsg(err.message || "Couldn't post your rating. Please try again."); }
+  };
+  return (
+    <div className="tpt-ratebox">
+      <b>Rate this {kind}</b>
+      <div style={{ display: "flex", gap: 2 }} role="radiogroup" aria-label="Your rating">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} type="button" className="icon-btn" role="radio" aria-checked={value === n} aria-label={`${n} star${n > 1 ? "s" : ""}`} onClick={() => setValue(n)}>
+            <Star size={26} color={T.saffronDeep} fill={n <= value ? T.saffronDeep : "none"} />
+          </button>
+        ))}
+      </div>
+      <textarea className="field-input" rows={3} maxLength={600} placeholder={kind === "test" ? "How did this test help your preparation? (optional)" : "How did you use it with your students? (optional)"} value={text} onChange={(e) => setText(e.target.value)} aria-label="Your review" />
+      {msg && <div style={{ color: T.red, fontSize: 13 }}>{msg}</div>}
+      <div><button type="button" className="btn-primary" onClick={submit} disabled={state === "saving"}>{state === "saving" ? "Posting…" : "Post rating"}</button></div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Cart                                                                   */
+/* ---------------------------------------------------------------------- */
+export function CartPage({ lines, session, onRemove, onOpen, onCheckout, onBrowse, onLogin }) {
+  const [coupon, setCoupon] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState("");
+  const [hasReward, setHasReward] = useState(false);
+  const [useReward, setUseReward] = useState(false);
+  const [quote, setQuote] = useState(null);
+  const [error, setError] = useState("");
+  const isBuyer = session?.role === "buyer";
+  const subtotal = lines.reduce((s2, l) => s2 + (Number(l.item.price) || 0), 0);
+  const key = lines.map((l) => `${l.kind}:${l.item.id}`).join(",");
+
+  useEffect(() => {
+    if (!isBuyer) return;
+    api.getMyReferrals().then((d) => setHasReward((d.rewards || []).some((r) => !r.used))).catch(() => {});
+  }, [isBuyer]);
+
+  useEffect(() => {
+    if (!isBuyer || lines.length === 0) { setQuote(null); return; }
+    let live = true;
+    api.quoteCart({ items: lines.map((l) => ({ kind: l.kind, itemId: l.item.id })), couponCode: appliedCoupon || undefined, applyReward: useReward })
+      .then((q) => { if (live) { setQuote(q); setError(""); } })
+      .catch((err) => {
+        if (!live) return;
+        setQuote(null); setError(err.message);
+        if (appliedCoupon && /coupon/i.test(err.message)) setAppliedCoupon("");
+      });
+    return () => { live = false; };
+  }, [key, appliedCoupon, useReward, isBuyer]);
+
+  const lineAmount = (l) => quote?.lines.find((q) => q.kind === l.kind && q.itemId === l.item.id)?.amount;
+  const total = quote ? quote.total : subtotal;
+
+  if (lines.length === 0) {
+    return (
+      <div className="tpt-page">
+        <h1 className="tpt-cart-h1">Your cart</h1>
+        <div className="empty-panel">
+          <ShoppingCart size={22} color={T.saffronDeep} />
+          <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontSize: 18, color: T.ink }}>Your cart is empty</div>
+          <div style={{ fontSize: 13.5, color: T.muted, margin: "4px 0 14px" }}>Add mock tests and teaching resources, then pay for everything at once.</div>
+          <button type="button" className="btn-primary" onClick={onBrowse}><Store size={15} /> Browse the marketplace</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tpt-page">
+      <h1 className="tpt-cart-h1">Your cart <span>({lines.length} item{lines.length > 1 ? "s" : ""})</span></h1>
+      <div className="tpt-cartgrid">
+        <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+          {lines.map((l) => {
+            const amt = lineAmount(l);
+            return (
+              <div key={`${l.kind}:${l.item.id}`} className="tpt-cartline">
+                <div className="tpt-cartline-thumb">
+                  {l.kind === "bundle"
+                    ? <div className="tpt-bundle-icon" style={{ background: colorFor(l.item.title), width: "100%", height: "100%" }}><Package size={22} color="#fff" /></div>
+                    : <ItemCover item={l.item} variant="thumb" />}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  {l.kind === "bundle"
+                    ? <b className="tpt-cartline-title">{l.item.title}</b>
+                    : <a className="tpt-cartline-title" href={itemPath(l.item)} onClick={(e) => { e.preventDefault(); onOpen(l.item); }}>{l.item.title}</a>}
+                  <div style={{ fontSize: 12.5, color: T.muted }}>{l.kind === "bundle" ? "Test bundle" : l.kind === "resource" ? l.item.resourceType : "Mock test"} · {l.item.sellerName}</div>
+                  <button type="button" className="tpt-plain tpt-link" style={{ fontSize: 12.5, marginTop: 4 }} onClick={() => onRemove(l)}><Trash2 size={13} /> Remove</button>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  {amt !== undefined && amt < l.item.price && <s style={{ fontSize: 12.5, color: T.muted, display: "block" }}>{priceLabel(l.item.price)}</s>}
+                  <span className="tpt-price">{priceLabel(amt ?? l.item.price)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <aside className="tpt-cartsum">
+          <h2>Order summary</h2>
+          <div className="tpt-sumrow"><span>Subtotal</span><span className="mono">{priceLabel(subtotal)}</span></div>
+          {quote && quote.total < subtotal && <div className="tpt-sumrow" style={{ color: T.green }}><span>Discounts</span><span className="mono">−{priceLabel(subtotal - quote.total)}</span></div>}
+          <div className="tpt-sumrow tpt-sumtotal"><span>Total</span><span className="mono">{priceLabel(total)}</span></div>
+          {isBuyer ? (
+            <>
+              <div className="tpt-coupon">
+                <input className="field-input" placeholder="Coupon code" aria-label="Coupon code" value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} />
+                <button type="button" className="btn-outline" onClick={() => setAppliedCoupon(coupon.trim())} disabled={!coupon.trim()}>Apply</button>
+              </div>
+              {appliedCoupon && !error && <div style={{ fontSize: 12.5, color: T.green }}>Coupon {appliedCoupon} applied.</div>}
+              {hasReward && (
+                <label className="reward-toggle" style={{ margin: 0 }}>
+                  <input type="checkbox" checked={useReward} onChange={(e) => setUseReward(e.target.checked)} />
+                  <Gift size={14} color={T.saffronDeep} /> <span>Use your referral reward — 50% off the priciest item</span>
+                </label>
+              )}
+              {error && <div className="tpt-error" role="alert" style={{ marginTop: 0 }}>{error}</div>}
+              <button type="button" className="tpt-btn tpt-btn-cart tpt-btn-lg" disabled={!quote} onClick={() => onCheckout({ total: quote.total, couponCode: appliedCoupon || undefined, applyReward: useReward })}>
+                <Lock size={15} /> {quote && quote.total === 0 ? "Get them free" : `Checkout · ${priceLabel(total)}`}
+              </button>
+              <div style={{ fontSize: 12, color: T.muted, textAlign: "center" }}>One payment via Razorpay — UPI, cards and net banking.</div>
+            </>
+          ) : (
+            <>
+              <button type="button" className="tpt-btn tpt-btn-dark tpt-btn-lg" onClick={onLogin}>Log in to check out</button>
+              <div style={{ fontSize: 12, color: T.muted, textAlign: "center" }}>Your cart stays saved on this device.</div>
+            </>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Admin: resource categories and class levels                            */
+/* ---------------------------------------------------------------------- */
+export function ResourceTaxonomyManager() {
+  const [tax, setTax] = useState(null);
+  const [usage, setUsage] = useState({ types: {}, grades: {} });
+  const [drafts, setDrafts] = useState({ types: "", grades: "" });
+  const [error, setError] = useState({ types: "", grades: "" });
+
+  useEffect(() => {
+    api.getResourceOptions().then(setTax).catch(() => setTax({ types: [], grades: [] }));
+    api.getResources().then(({ resources }) => {
+      const u = { types: {}, grades: {} };
+      for (const r of resources) {
+        u.types[r.resourceType] = (u.types[r.resourceType] || 0) + 1;
+        u.grades[r.grade] = (u.grades[r.grade] || 0) + 1;
+      }
+      setUsage(u);
+    }).catch(() => {});
+  }, []);
+
+  const add = async (list) => {
+    const name = drafts[list].trim();
+    if (!name) return;
+    try {
+      const next = await api.addResourceTaxonomy(list, name);
+      setTax((t) => ({ ...t, ...next })); setDrafts((d) => ({ ...d, [list]: "" })); setError((e) => ({ ...e, [list]: "" }));
+    } catch (err) { setError((e) => ({ ...e, [list]: err.message })); }
+  };
+  const remove = async (list, name) => {
+    try {
+      const next = await api.removeResourceTaxonomy(list, name);
+      setTax((t) => ({ ...t, ...next })); setError((e) => ({ ...e, [list]: "" }));
+    } catch (err) { setError((e) => ({ ...e, [list]: err.message })); }
+  };
+
+  const block = (list, title, hint, placeholder) => (
+    <div style={{ marginTop: list === "grades" ? 22 : 0 }}>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: T.ink, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 12 }}>{hint}</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input className="field-input" placeholder={placeholder} value={drafts[list]} aria-label={`New ${title.toLowerCase()}`}
+          onChange={(e) => setDrafts((d) => ({ ...d, [list]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && add(list)} />
+        <button type="button" className="btn-primary" onClick={() => add(list)}><Plus size={14} /> Add</button>
+      </div>
+      {error[list] && <div style={{ color: T.red, fontSize: 12.5, marginBottom: 10 }}>{error[list]}</div>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {(tax?.[list] || []).map((c) => (
+          <span key={c} className="cat-tag">
+            {c} <span style={{ color: T.muted, fontFamily: "var(--font-mono)", fontSize: 10.5 }}>({usage[list][c] || 0})</span>
+            <button type="button" className="cat-tag-remove" onClick={() => remove(list, c)} title={`Remove ${c}`} aria-label={`Remove ${c}`}><X size={12} /></button>
+          </span>
+        ))}
+        {tax && tax[list].length === 0 && <span style={{ fontSize: 13, color: T.muted }}>None yet — add one above.</span>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="split-panel">
+      {block("types", "Teaching resource categories", "What sellers choose when uploading, and the filter chips on the Teaching resources tab.", "e.g. Flashcards, Lab manual, Previous year papers…")}
+      {block("grades", "Resource class levels", "The class/level dropdown for resources.", "e.g. Class 12 Commerce, Diploma…")}
     </div>
   );
 }
@@ -1036,7 +1307,35 @@ export const TPT_CSS = `
   .tpt-progress-bar { flex: 1; height: 8px; border-radius: 4px; background: ${T.paperAlt}; overflow: hidden; }
   .tpt-progress-bar div { height: 100%; background: ${T.green}; transition: width 0.2s; }
 
+  .tpt-ratingsum { display: grid; grid-template-columns: 130px minmax(0, 320px); gap: 20px; align-items: center; }
+  .tpt-ratingbig { font-family: var(--font-display); font-size: 44px; font-weight: 700; color: ${T.ink}; line-height: 1; }
+  .tpt-bars { display: grid; gap: 4px; }
+  .tpt-bar { display: grid; grid-template-columns: 52px 1fr 40px; gap: 8px; align-items: center; font-size: 12.5px; color: ${T.inkSoft}; }
+  .tpt-bar-track { height: 8px; border-radius: 4px; background: ${T.paperAlt}; overflow: hidden; }
+  .tpt-bar-track div { height: 100%; background: ${T.saffronDeep}; }
+  .tpt-ratebox { display: grid; gap: 8px; max-width: 520px; background: #fff; border: 1px solid ${T.line}; border-radius: 10px; padding: 14px; }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  .tpt-cart-h1 { font-family: var(--font-display); font-size: 28px; color: ${T.ink}; margin: 6px 0 18px; }
+  .tpt-cart-h1 span { font-size: 16px; color: ${T.muted}; font-weight: 400; }
+  .tpt-cartgrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+  .tpt-cartline { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; align-items: center; background: #fff; border: 1px solid ${T.line}; border-radius: 10px; padding: 12px; }
+  .tpt-cartline-thumb { width: 64px; height: 64px; border-radius: 6px; overflow: hidden; }
+  .tpt-cartline-title { display: block; font-weight: 600; font-size: 14.5px; color: ${T.ink}; text-decoration: none; line-height: 1.3; }
+  a.tpt-cartline-title:hover { text-decoration: underline; }
+  .tpt-cartsum { background: #fff; border: 1px solid ${T.line}; border-radius: 12px; padding: 18px; display: grid; gap: 10px; position: sticky; top: 80px; }
+  .tpt-cartsum h2 { font-family: var(--font-display); font-size: 20px; color: ${T.ink}; margin: 0; }
+  .tpt-sumrow { display: flex; justify-content: space-between; font-size: 14px; color: ${T.ink}; }
+  .tpt-sumtotal { font-weight: 700; font-size: 17px; border-top: 1px solid ${T.line}; padding-top: 10px; }
+  .tpt-coupon { display: flex; gap: 6px; }
+  .tpt-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .cart-nav-btn { position: relative; display: flex; align-items: center; gap: 6px; background: transparent; border: none; color: ${T.paper}; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+  .cart-nav-btn:hover { background: rgba(255,255,255,0.08); }
+  .cart-nav-count { position: absolute; top: -2px; right: -4px; background: ${T.green}; color: #fff; font-size: 10px; min-width: 16px; height: 16px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; font-family: var(--font-mono); }
+
   @media (max-width: 900px) {
+    .tpt-cartgrid { grid-template-columns: 1fr; }
+    .tpt-cartsum { position: static; }
     .tpt-pp { grid-template-columns: 1fr; gap: 24px; }
     .tpt-upload-grid { grid-template-columns: 1fr; }
   }
@@ -1056,6 +1355,8 @@ export const TPT_CSS = `
     .tpt-sticky-inner { padding: 8px 16px; }
     .tpt-sticky-title .tpt-rating { display: none; }
     .tpt-two { grid-template-columns: 1fr; }
+    .tpt-ratingsum { grid-template-columns: 1fr; }
+    .cart-nav-label { display: none; }
     .tpt-side h1 { font-size: 23px; }
   }
   @media (max-width: 380px) {
