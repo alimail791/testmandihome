@@ -233,6 +233,13 @@ export const api = {
   unfollowSeller: (email) => request(`/api/sellers/${encodeURIComponent(email)}/follow`, { method: "DELETE" }),
   getMyFollowers: () => request("/api/sellers/me/followers"),
 
+  // ---- cart ----
+  quoteCart: (payload) => request("/api/checkout/quote", { method: "POST", body: payload }),
+
+  // ---- admin: resource categories and class levels ----
+  addResourceTaxonomy: (list, name) => request(`/api/admin/resource-taxonomy/${list}`, { method: "POST", body: { name } }),
+  removeResourceTaxonomy: (list, name) => request(`/api/admin/resource-taxonomy/${list}/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
   // ---- chat ----
   chat: (messages, roleHint, name) => request("/api/chat", { method: "POST", body: { messages, roleHint, name }, auth: false }),
 };

@@ -368,7 +368,7 @@ app.use(express.static(DIST_DIR, { extensions: [] }));
 // /.docker/secrets.json or /wp-admin) gets a real 404 instead of silently
 // pretending to be a valid page. A 200 on junk paths is a "soft 404" signal
 // that can hurt how much Google trusts the rest of the site's status codes.
-const KNOWN_APP_PATH = /^\/((tests|resources)\/[^/]+(\/.*)?|privacy|terms)?$/;
+const KNOWN_APP_PATH = /^\/((tests|resources)\/[^/]+(\/.*)?|privacy|terms|cart)?$/;
 app.use((req, res) => {
   const indexHtml = path.join(DIST_DIR, "index.html");
   if (KNOWN_APP_PATH.test(req.path)) {

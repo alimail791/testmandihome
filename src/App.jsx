@@ -5,7 +5,7 @@ import { api } from "./api.js";
 import { T } from "./theme.js";
 import {
   ProductCard, ProductPage, ResourceBrowser, SellerResourcesPanel, MyResourcesPanel,
-  asTest, asResource, itemPath, TPT_CSS,
+  asTest, asResource, itemPath, TPT_CSS, CartContext, CartPage, ResourceTaxonomyManager,
 } from "./marketplace2.jsx";
 import {
   Star, ShoppingCart, Plus, Clock, Users, TrendingUp, CheckCircle2, XCircle,
@@ -753,7 +753,7 @@ function loadRazorpayScript() {
   });
 }
 
-function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sellerName, buyerName, onClose, onSuccess }) {
+function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sellerName, buyerName, onClose, onSuccess, cart }) {
   const [phase, setPhase] = useState("form"); // form | processing | success | error
   const [errorMsg, setErrorMsg] = useState("");
   const [applyReward, setApplyReward] = useState(false);
@@ -763,7 +763,7 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
   const payerLabel = kind === "ad" ? "Advertiser" : "Buyer";
 
   useEffect(() => {
-    if (kind === "ad") return;
+    if (kind === "ad" || kind === "cart") return; // the cart page handles its own reward choice
     api.getMyReferrals().then((data) => setHasReward((data.rewards || []).some((r) => !r.used))).catch(() => {});
   }, [kind]);
 
@@ -773,7 +773,9 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
     setPhase("processing");
     setErrorMsg("");
     try {
-      const order = await api.createOrder({ kind, itemId, adDraft, applyReward, couponCode: couponCode.trim() || undefined });
+      const order = kind === "cart"
+        ? await api.createOrder({ kind, items: cart.items, applyReward: !!cart.applyReward, couponCode: cart.couponCode })
+        : await api.createOrder({ kind, itemId, adDraft, applyReward, couponCode: couponCode.trim() || undefined });
 
       if (order.free) {
         // Backend already completed this at zero cost — nothing to pay for.
@@ -832,7 +834,9 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
               {kind === "ad" ? (
                 <>Your ad <strong style={{ color: T.ink }}>{displayTitle}</strong> is now live.</>
               ) : (
-                kind === "resource"
+                kind === "cart"
+                  ? <>Your {displayTitle} {cart?.items.length === 1 ? "is" : "are"} unlocked. Find tests and resources in My Learning.</>
+                  : kind === "resource"
                   ? <><strong style={{ color: T.ink }}>{displayTitle}</strong> is yours. Download it any time from My Learning → My Resources.</>
                   : <>Payment confirmed for <strong style={{ color: T.ink }}>{displayTitle}</strong>. It's now unlocked in My Learning.</>
               )}
@@ -3495,6 +3499,8 @@ function Admin({ tests, purchases, bundles, bundlePurchases, sellerShare, setSel
 
       <CategoryManager categories={categories} tests={tests} onAdd={onAddCategory} onRemove={onRemoveCategory} />
 
+      <ResourceTaxonomyManager />
+
       <NotificationComposer notifications={notifications} onSend={onSendNotification} />
 
       <div style={{ marginTop: 30 }}>
@@ -4289,6 +4295,15 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
     return new URLSearchParams(window.location.search).get("tab") === "resources" ? "resources" : "tests";
   });
   const [learningTab, setLearningTab] = useState("tests");
+
+  // Cart: [{ kind: "test" | "resource" | "bundle", id }], kept in this
+  // browser so it survives refreshes and logging in.
+  const [cart, setCart] = useState(() => {
+    try { const c = JSON.parse(localStorage.getItem("tm_cart") || "[]"); return Array.isArray(c) ? c.filter((x) => x && x.kind && x.id).slice(0, 20) : []; }
+    catch { return []; }
+  });
+  useEffect(() => { try { localStorage.setItem("tm_cart", JSON.stringify(cart)); } catch { /* storage blocked */ } }, [cart]);
+  const [cartCheckout, setCartCheckout] = useState(null); // { items, couponCode, applyReward }
   const [bundles, setBundles] = useState([]);
   const [ads, setAds] = useState([]);
   const [marketplaceAds, setMarketplaceAds] = useState([]);
@@ -4378,6 +4393,8 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
       const pv = productFromPath(window.location.pathname);
       setProductView(pv);
       if (pv) setRole("marketplace");
+      else if (window.location.pathname === "/cart") setRole("cart");
+      else setRole((r) => (r === "cart" ? "marketplace" : r));
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -4445,6 +4462,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
     else if (role === "privacy") { title = "Privacy Policy — TestMandi"; description = "How TestMandi collects, uses, and protects your personal information."; }
     else if (role === "terms") { title = "Terms of Service — TestMandi"; description = "The terms that govern buying, selling, and advertising on TestMandi."; }
     else if (role === "admin") { title = "Admin — TestMandi"; noindex = true; }
+    else if (role === "cart") { title = "Your cart — TestMandi"; noindex = true; }
 
     document.title = title;
     setMeta("description", description);
@@ -4642,6 +4660,16 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
     } else if (checkoutKind === "bundle") {
       if (result?.purchase) setBundlePurchases((bp) => [...bp, result.purchase]);
       setRole("learning");
+    } else if (checkoutKind === "cart") {
+      const got = result?.purchases || [];
+      setPurchases((p) => [...p, ...got.filter((g) => g.kind === "test").map((g) => g.purchase)]);
+      setBundlePurchases((bp) => [...bp, ...got.filter((g) => g.kind === "bundle").map((g) => g.purchase)]);
+      setResourcePurchases((rp) => [...got.filter((g) => g.kind === "resource").map((g) => g.purchase), ...rp]);
+      setCart([]);
+      setCartCheckout(null);
+      setLearningTab(got.length && got.every((g) => g.kind === "resource") ? "resources" : "tests");
+      window.history.pushState({}, "", "/");
+      setRole("learning");
     } else if (checkoutKind === "resource") {
       if (result?.purchase) setResourcePurchases((rp) => [result.purchase, ...rp]);
       setLearningTab("resources");
@@ -4745,6 +4773,51 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
     if (session.role === "seller") return new Set(resources.filter((r) => r.sellerEmail === session.email).map((r) => r.id));
     return new Set();
   }, [session, resourcePurchases, resources]);
+
+  // Cart lines resolved against loaded catalogue data; owned items drop out.
+  const cartLines = cart.map((c) => {
+    if (c.kind === "test") {
+      const t = tests.find((x) => x.id === c.id);
+      return t && !purchasedIds.has(t.id) ? { kind: "test", item: asTest(t) } : null;
+    }
+    if (c.kind === "resource") {
+      const r = resources.find((x) => x.id === c.id);
+      return r && !ownedResourceIds.has(r.id) ? { kind: "resource", item: asResource(r) } : null;
+    }
+    const b = bundles.find((x) => x.id === c.id);
+    return b && !purchasedBundleIds.has(b.id) ? { kind: "bundle", item: { ...b, kind: "bundle" } } : null;
+  }).filter(Boolean);
+  const cartCount = cartLines.length;
+  const openCart = () => {
+    if (window.location.pathname !== "/cart") window.history.pushState({}, "", "/cart");
+    setProductView(null);
+    setRole("cart");
+  };
+  const cartApi = {
+    has: (item) => cart.some((c) => c.kind === (item.kind || "test") && c.id === item.id),
+    add: (item) => setCart((c) => (c.some((x) => x.kind === (item.kind || "test") && x.id === item.id) || c.length >= 20 ? c : [...c, { kind: item.kind || "test", id: item.id }])),
+    remove: (kind, id) => setCart((c) => c.filter((x) => !(x.kind === kind && x.id === id))),
+    open: openCart,
+  };
+  const startCartCheckout = ({ total, couponCode, applyReward }) => {
+    if (!session || session.role !== "buyer") { openAuth("buyer", "login"); return; }
+    setCartCheckout({ items: cartLines.map((l) => ({ kind: l.kind, itemId: l.item.id })), couponCode, applyReward });
+    setCheckoutTest({ id: null, title: `${cartLines.length} item${cartLines.length > 1 ? "s" : ""}`, price: total, sellerName: "TestMandi" });
+    setCheckoutKind("cart");
+  };
+
+  // Ratings straight from a product page, for items the buyer owns.
+  const rateFromProductPage = async (item, value, text) => {
+    if (item.kind === "resource") {
+      const { resource } = await api.rateResource(item.id, value, text);
+      setResources((x) => x.map((y) => (y.id === resource.id ? resource : y)));
+      setSession((s) => ({ ...s, ratedResourceIds: [...(s.ratedResourceIds || []), item.id] }));
+    } else {
+      const { test } = await api.rateTest(item.id, value, text);
+      setTests((ts) => ts.map((t) => (t.id === test.id ? test : t)));
+      setSession((s) => ({ ...s, ratedTestIds: [...(s.ratedTestIds || []), item.id] }));
+    }
+  };
 
   const downloadResource = async (r) => {
     try {
@@ -4850,6 +4923,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
   ];
 
   return (
+    <CartContext.Provider value={cartApi}>
     <div style={{ fontFamily: "var(--font-body)", background: T.paper, minHeight: "100%", color: T.ink }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -5052,7 +5126,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
         <div className="nav-tabs">
           {NAV.map((n) => (
             <button key={n.key} className={`nav-tab ${role === n.key ? "active" : ""}`} onClick={() => {
-              if (productView) { setProductView(null); window.history.pushState({}, "", "/"); }
+              if (productView || role === "cart") { setProductView(null); window.history.pushState({}, "", "/"); }
               if (n.key === "learning") setLearningTab("tests");
               setRole(n.key);
             }}>
@@ -5061,6 +5135,12 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           ))}
         </div>
         <div className="auth-controls">
+          {(!session || session.role === "buyer") && (
+            <button type="button" className="cart-nav-btn" onClick={openCart} aria-label={`Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`}>
+              <ShoppingCart size={17} /> <span className="cart-nav-label">Cart</span>
+              {cartCount > 0 && <span className="cart-nav-count">{cartCount}</span>}
+            </button>
+          )}
           <NotificationBell notifications={notifications} session={session} />
           {session ? (
             <div className="session-chip">
@@ -5092,6 +5172,17 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
         <LeaderboardView scheduledTestId={leaderboardId} onBack={() => setLeaderboardId(null)} />
       ) : (
       <>
+      {role === "cart" && (
+        <CartPage
+          lines={cartLines}
+          session={session}
+          onRemove={(l) => cartApi.remove(l.kind, l.item.id)}
+          onOpen={openItem}
+          onCheckout={startCartCheckout}
+          onBrowse={() => { window.history.pushState({}, "", "/"); setRole("marketplace"); }}
+          onLogin={() => openAuth("buyer", "login")}
+        />
+      )}
       {role === "marketplace" && productView && !productIsBundle && (
         <ProductPage
           item={productItem}
@@ -5115,6 +5206,10 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           session={session}
           following={productItem ? followingSet.has(productItem.sellerEmail) : false}
           onToggleFollow={toggleFollow}
+          canRate={!!productItem && session?.role === "buyer" &&
+            (productItem.kind === "resource" ? ownedResourceIds.has(productItem.id) && !(session.ratedResourceIds || []).includes(productItem.id)
+              : purchasedIds.has(productItem.id) && !(session.ratedTestIds || []).includes(productItem.id))}
+          onRate={(v, t) => rateFromProductPage(productItem, v, t)}
         />
       )}
       {role === "marketplace" && (!productView || productIsBundle) && (
@@ -5309,11 +5404,13 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           displayPrice={checkoutTest.price}
           sellerName={checkoutTest.sellerName}
           buyerName={session.name}
+          cart={checkoutKind === "cart" ? cartCheckout : null}
           onClose={() => setCheckoutTest(null)}
           onSuccess={handleCheckoutSuccess}
         />
       )}
     </div>
+    </CartContext.Provider>
   );
 }
 
@@ -5414,6 +5511,7 @@ export default function App() {
             Ads account/campaign setup, not just reachable as an in-app tab. */}
         <Route path="/privacy" element={<AppShell routeRole="privacy" />} />
         <Route path="/terms" element={<AppShell routeRole="terms" />} />
+        <Route path="/cart" element={<AppShell routeRole="cart" />} />
         <Route path="*" element={<AppShell />} />
       </Routes>
     </BrowserRouter>
