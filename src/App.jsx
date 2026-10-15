@@ -5,7 +5,7 @@ import { api } from "./api.js";
 import { T } from "./theme.js";
 import {
   ProductCard, ProductPage, ResourceBrowser, SellerResourcesPanel, MyResourcesPanel,
-  asTest, asResource, itemPath, TPT_CSS, CartContext, CartPage, ResourceTaxonomyManager,
+  asTest, asResource, itemPath, TPT_CSS, CartContext, CatalogContext, CartPage, ResourceTaxonomyManager, TestCoverButton, ItemCover,
 } from "./marketplace2.jsx";
 import {
   Star, ShoppingCart, Plus, Clock, Users, TrendingUp, CheckCircle2, XCircle,
@@ -2140,7 +2140,7 @@ function TestAnalyticsView({ testId, testTitle, onBack }) {
 }
 
 
-function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon, myResources = [], resourcesPanel, followerCount }) {
+function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon, myResources = [], resourcesPanel, followerCount, onTestCoverChanged }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [bundleWizardOpen, setBundleWizardOpen] = useState(false);
   const [analyticsTest, setAnalyticsTest] = useState(null);
@@ -2260,6 +2260,7 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
           const blocked = isBlockedTest(test);
           return (
             <div key={test.id} className="ledger-row">
+              <div style={{ width: 54, flexShrink: 0 }}><ItemCover item={{ ...test, kind: "test" }} variant="thumb" /></div>
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
                   <Stamp>{test.category}</Stamp>
@@ -2278,6 +2279,7 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
                 <div><div className="fig-label">Platform</div><div className="fig-value" style={{ color: T.muted }}>₹{fee}</div></div>
               </div>
               <ShareMenu test={test} variant="seller" />
+              {onTestCoverChanged && <TestCoverButton test={test} onChanged={(patch) => onTestCoverChanged(test.id, patch)} />}
               <button className="icon-btn" title="Question analytics" onClick={() => setAnalyticsTest(test)}><BarChart3 size={15} /></button>
             </div>
           );
@@ -4799,6 +4801,16 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
     remove: (kind, id) => setCart((c) => c.filter((x) => !(x.kind === kind && x.id === id))),
     open: openCart,
   };
+  const catalogApi = {
+    bundlesFor: (testId) => bundles.filter((b) => b.testIds?.includes(testId)),
+    openBundle: (b) => {
+      window.history.pushState({}, "", `/tests/${b.id}/${slugify(b.title)}`);
+      setProductView({ kind: "test", id: b.id });
+      setRole("marketplace");
+      window.scrollTo({ top: 0 });
+    },
+  };
+
   const startCartCheckout = ({ total, couponCode, applyReward }) => {
     if (!session || session.role !== "buyer") { openAuth("buyer", "login"); return; }
     setCartCheckout({ items: cartLines.map((l) => ({ kind: l.kind, itemId: l.item.id })), couponCode, applyReward });
@@ -4924,6 +4936,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
 
   return (
     <CartContext.Provider value={cartApi}>
+    <CatalogContext.Provider value={catalogApi}>
     <div style={{ fontFamily: "var(--font-body)", background: T.paper, minHeight: "100%", color: T.ink }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -5267,6 +5280,10 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           onDeleteCoupon={deleteCoupon}
           myResources={sellerResources}
           followerCount={sellerFollowers}
+          onTestCoverChanged={(id, patch) => {
+            setSellerTests((x) => x.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+            setTests((x) => x.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+          }}
           resourcesPanel={session?.role === "seller" ? (
             <SellerResourcesPanel
               myResources={sellerResources}
@@ -5410,6 +5427,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
         />
       )}
     </div>
+    </CatalogContext.Provider>
     </CartContext.Provider>
   );
 }
