@@ -73,6 +73,34 @@ async function request(path, options = {}) {
   return result.data;
 }
 
+function xhrUpload(path, formData, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}${path}`);
+    const { token } = getTokens();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* empty body */ }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+    };
+    xhr.onerror = () => resolve({ ok: false, status: 0, data: { error: "Upload failed — check your internet connection and try again." } });
+    xhr.send(formData);
+  });
+}
+
+async function uploadWithProgress(path, formData, onProgress) {
+  let result = await xhrUpload(path, formData, onProgress);
+  if (result.status === 401 && (await tryRefresh())) result = await xhrUpload(path, formData, onProgress);
+  if (!result.ok) {
+    const err = new Error(result.data?.error || `Upload failed (${result.status})`);
+    err.status = result.status;
+    throw err;
+  }
+  return result.data;
+}
+
 export const api = {
   baseUrl: API_BASE,
   // ---- session/token management ----
@@ -183,6 +211,27 @@ export const api = {
   getAdminPayouts: () => request("/api/admin/payouts"),
   resolveAdminPayout: (id, outcome, reference) => request(`/api/admin/payouts/${id}/resolve`, { method: "POST", body: { outcome, reference } }),
   getAllAdminData: () => request("/api/admin/all-data"),
+
+  // ---- teaching resources (worksheets, notes, slides…) ----
+  getResources: () => request("/api/resources", { auth: false }),
+  getResourceOptions: () => request("/api/resources/options", { auth: false }),
+  getMyResources: () => request("/api/resources/mine"),
+  getResourceReviews: (id) => request(`/api/resources/${id}/reviews`, { auth: false }),
+  rateResource: (id, value, reviewText) => request(`/api/resources/${id}/rate`, { method: "POST", body: { value, reviewText } }),
+  updateResource: (id, patch) => request(`/api/resources/${id}`, { method: "PATCH", body: patch }),
+  deleteResource: (id) => request(`/api/resources/${id}`, { method: "DELETE" }),
+  getResourceDownload: (id) => request(`/api/resources/${id}/download`),
+  getMyResourcePurchases: () => request("/api/resource-purchases/mine"),
+  resourceImageUrl: (id, slot) => `${API_BASE}/api/resources/${id}/image/${slot}`,
+  // Multipart upload with progress (XHR, since fetch can't report upload
+  // progress). Retries once after refreshing an expired access token.
+  uploadResource: (formData, onProgress) => uploadWithProgress("/api/resources", formData, onProgress),
+
+  // ---- follow a seller ----
+  getSellerProfile: (email) => request(`/api/sellers/${encodeURIComponent(email)}/profile`, { auth: false }),
+  followSeller: (email) => request(`/api/sellers/${encodeURIComponent(email)}/follow`, { method: "POST" }),
+  unfollowSeller: (email) => request(`/api/sellers/${encodeURIComponent(email)}/follow`, { method: "DELETE" }),
+  getMyFollowers: () => request("/api/sellers/me/followers"),
 
   // ---- chat ----
   chat: (messages, roleHint, name) => request("/api/chat", { method: "POST", body: { messages, roleHint, name }, auth: false }),

@@ -46,7 +46,21 @@ async function generateSitemap() {
     priority: '0.8',
   }));
 
-  const allUrls = [...staticUrls, ...testUrls];
+  let resources = [];
+  try {
+    const res = await fetch(`${API_BASE}/api/resources`);
+    const data = res.ok ? await res.json() : { resources: [] };
+    resources = data.resources || [];
+  } catch (err) {
+    console.error('Could not fetch resources for sitemap:', err.message);
+  }
+  const resourceUrls = resources.map((r) => ({
+    loc: `${SITE_URL}/resources/${r.id}/${slugify(r.title)}`,
+    lastmod: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : undefined,
+    priority: '0.7',
+  }));
+
+  const allUrls = [...staticUrls, ...testUrls, ...resourceUrls];
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -62,7 +76,7 @@ ${u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>\n` : ''}    <priority>${u.pri
 `;
 
   fs.writeFileSync('public/sitemap.xml', xml);
-  console.log(`Sitemap written with ${allUrls.length} URLs (${testUrls.length} tests).`);
+  console.log(`Sitemap written with ${allUrls.length} URLs (${testUrls.length} tests, ${resourceUrls.length} resources).`);
 }
 
 generateSitemap();

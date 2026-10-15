@@ -2,6 +2,11 @@ import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from "rea
 import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { api } from "./api.js";
+import { T } from "./theme.js";
+import {
+  ProductCard, ProductPage, ResourceBrowser, SellerResourcesPanel, MyResourcesPanel,
+  asTest, asResource, itemPath, TPT_CSS,
+} from "./marketplace2.jsx";
 import {
   Star, ShoppingCart, Plus, Clock, Users, TrendingUp, CheckCircle2, XCircle,
   ChevronRight, ChevronLeft, Award, Settings, Trash2, Play, Search, X,
@@ -24,18 +29,7 @@ const ChartFallback = ({ height = 160 }) => <div style={{ height }} />;
 /* ---------------------------------------------------------------------- */
 /* Design tokens                                                          */
 /* ---------------------------------------------------------------------- */
-const T = {
-  ink: "#1B2A4A",
-  inkSoft: "#3B4C72",
-  paper: "#FBF7EE",
-  paperAlt: "#F1E9D6",
-  saffron: "#E8A33D",
-  saffronDeep: "#C97F1B",
-  green: "#2F7A4F",
-  red: "#B8503E",
-  line: "#CBBFA0",
-  muted: "#79705C",
-};
+// Design tokens live in theme.js so marketplace2.jsx can share them.
 
 /* ---------------------------------------------------------------------- */
 /* Seed data                                                               */
@@ -833,16 +827,18 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
         <div className="modal-card" style={{ maxWidth: 420 }}>
           <div style={{ padding: "40px 26px", textAlign: "center" }}>
             <CheckCircle2 size={40} color={T.green} style={{ margin: "0 auto 14px" }} />
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: T.ink, marginBottom: 6 }}>Payment successful</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: T.ink, marginBottom: 6 }}>{Number(displayPrice) === 0 ? "Added to your library" : "Payment successful"}</div>
             <div style={{ fontSize: 13.5, color: T.muted, marginBottom: 18 }}>
               {kind === "ad" ? (
                 <>Your ad <strong style={{ color: T.ink }}>{displayTitle}</strong> is now live.</>
               ) : (
-                <>Payment confirmed for <strong style={{ color: T.ink }}>{displayTitle}</strong>. It's now unlocked in My Learning.</>
+                kind === "resource"
+                  ? <><strong style={{ color: T.ink }}>{displayTitle}</strong> is yours. Download it any time from My Learning → My Resources.</>
+                  : <>Payment confirmed for <strong style={{ color: T.ink }}>{displayTitle}</strong>. It's now unlocked in My Learning.</>
               )}
             </div>
             <button className="btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={() => onSuccess(resultRecord)}>
-              {kind === "ad" ? "Go to Ads Studio" : "Go to My Learning"}
+              {kind === "ad" ? "Go to Ads Studio" : kind === "resource" ? "Go to My Resources" : "Go to My Learning"}
             </button>
           </div>
         </div>
@@ -880,7 +876,7 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
             </label>
           )}
 
-          {(kind === "test" || kind === "bundle") && (phase === "form" || phase === "error") && (
+          {(kind === "test" || kind === "bundle" || kind === "resource") && Number(displayPrice) > 0 && (phase === "form" || phase === "error") && (
             <label className="field-label" style={{ marginTop: 10, marginBottom: 4 }}>Coupon code (optional)
               <input className="field-input" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="e.g. WELCOME10" />
             </label>
@@ -902,11 +898,13 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
           {(phase === "form" || phase === "error") && (
             <>
               <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={pay}>
-                <Lock size={14} /> Pay ₹{shownPrice} via Razorpay
+                {Number(displayPrice) === 0 ? <><Download size={14} /> Get it free</> : <><Lock size={14} /> Pay ₹{shownPrice} via Razorpay</>}
               </button>
-              <div style={{ fontSize: 11.5, color: T.muted, marginTop: 10, textAlign: "center" }}>
-                Opens Razorpay's secure checkout. Use test-mode card/UPI details if your account is in test mode.
-              </div>
+              {Number(displayPrice) > 0 && (
+                <div style={{ fontSize: 11.5, color: T.muted, marginTop: 10, textAlign: "center" }}>
+                  Opens Razorpay's secure checkout — UPI, cards and net banking.
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1063,63 +1061,6 @@ function ShareMenu({ test, variant }) {
 /* ---------------------------------------------------------------------- */
 /* Marketplace                                                            */
 /* ---------------------------------------------------------------------- */
-function TestCard({ test, purchased, onBuy, onOpenLearning, wishlisted, onToggleWishlist }) {
-  return (
-    <div className="ticket-card">
-      <div style={{ padding: "16px 18px 14px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-          <Stamp>{test.category}</Stamp>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <Stars value={test.rating} />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: T.muted }}>
-                {test.rating.toFixed(1)} ({test.ratingCount})
-              </span>
-            </div>
-            {onToggleWishlist && (
-              <button className="icon-btn" title={wishlisted ? "Remove from wishlist" : "Save for later"} onClick={onToggleWishlist} style={{ padding: 4 }}>
-                <Heart size={16} color={T.saffronDeep} fill={wishlisted ? T.saffronDeep : "none"} />
-              </button>
-            )}
-          </div>
-        </div>
-        <h3 style={{ fontFamily: "var(--font-display)", fontSize: 19, color: T.ink, margin: "10px 0 6px", lineHeight: 1.25 }}>
-          {/* A real <a href> so Google can follow from the listing to each
-              test's own page — buttons with onClick handlers aren't links to
-              a crawler, which left test pages reachable only via the sitemap. */}
-          <a href={`/tests/${test.id}/${slugify(test.title)}`} style={{ color: "inherit", textDecoration: "none" }}>
-            {test.title}
-          </a>
-        </h3>
-        <p style={{ fontSize: 13.5, color: T.muted, margin: "0 0 10px", lineHeight: 1.5 }}>{test.description}</p>
-        <div style={{ fontSize: 12.5, color: T.inkSoft, display: "flex", gap: 14, fontFamily: "var(--font-mono)" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><ClipboardList size={13} /> {test.questionCount ?? test.questions?.length ?? 0} Qs</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={13} /> {test.duration} min</span>
-        </div>
-        <div style={{ fontSize: 12.5, color: T.muted, marginTop: 8 }}>by <strong style={{ color: T.ink }}>{test.sellerName}</strong></div>
-      </div>
-      <div className="ticket-perforation" />
-      <div style={{ padding: "12px 18px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, color: T.ink }}>
-          ₹{test.price}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <ShareMenu test={test} variant="buyer" />
-          {purchased ? (
-            <button className="btn-outline" onClick={onOpenLearning}>
-              <BookOpen size={15} /> Go to test
-            </button>
-          ) : (
-            <button className="btn-primary" onClick={onBuy}>
-              <ShoppingCart size={15} /> Buy
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function BundleCard({ bundle, testsById, purchased, onBuy, onOpenLearning }) {
   const included = bundle.testIds.map((id) => testsById[id]).filter(Boolean);
   const sumPrice = included.reduce((s, t) => s + t.price, 0);
@@ -1271,7 +1212,7 @@ function PassesSection({ passes, myGrants, onBuyPass }) {
   );
 }
 
-function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId, scheduledTests, onJoinLive, onViewLeaderboard, allAccessPasses, myAccessGrants, onBuyPass, wishlistIds, onToggleWishlist }) {
+function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId, scheduledTests, onJoinLive, onViewLeaderboard, allAccessPasses, myAccessGrants, onBuyPass, wishlistIds, onToggleWishlist, resources, resourceOptions, ownedResourceIds, onOpenItem, onBuyResource, onDownloadResource, onSellResources, tab, onTabChange }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState("rating");
@@ -1283,8 +1224,9 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
   const homepageAd = activeAds.find((a) => a.placement === "homepage");
   const categoryAd = cat !== "All" ? activeAds.find((a) => a.placement === cat) : null;
 
-  const sharedTest = sharedItemId ? tests.find((t) => t.id === sharedItemId) : null;
-  const sharedBundle = !sharedTest && sharedItemId ? bundles.find((b) => b.id === sharedItemId) : null;
+  // Shared test links now open the test's own product page (see AppShell);
+  // only shared bundle links still land here.
+  const sharedBundle = sharedItemId ? bundles.find((b) => b.id === sharedItemId) : null;
 
   const filtered = useMemo(() => {
     let list = tests.filter((t) =>
@@ -1329,13 +1271,13 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
           </h1>
           <p style={{ color: "#DCD2B8", fontSize: 15, lineHeight: 1.6, margin: 0 }}>
             Teachers, institutes and exam bodies list tests here; candidates buy, attempt online, and get an instant
-            score report with topic-wise analysis — so you always know exactly what to study next.
+            score report with topic-wise analysis. Teachers also sell worksheets, notes and slides for every board and class.
           </p>
         </div>
       </div>
 
       <div style={{ padding: "26px 28px 8px" }}>
-        {(sharedTest || sharedBundle) && (
+        {sharedBundle && (
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <Share2 size={15} color={T.saffronDeep} />
@@ -1344,9 +1286,6 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
               </span>
             </div>
             <div className="grid-cards" style={{ maxWidth: 380 }}>
-              {sharedTest && (
-                <TestCard test={sharedTest} purchased={purchasedIds.has(sharedTest.id)} onBuy={() => onBuy(sharedTest)} onOpenLearning={goLearning} />
-              )}
               {sharedBundle && (
                 <BundleCard
                   bundle={sharedBundle}
@@ -1361,6 +1300,28 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
           </div>
         )}
         {homepageAd && <AdBanner ad={homepageAd} />}
+        <div className="tpt-tabs" role="tablist" aria-label="What to browse">
+          <button type="button" role="tab" className="tpt-tab" aria-selected={tab !== "resources"} onClick={() => onTabChange("tests")}>
+            <ClipboardList size={16} /> Mock tests <span className="tpt-count">{tests.filter((t) => !isBlockedTest(t)).length}</span>
+          </button>
+          <button type="button" role="tab" className="tpt-tab" aria-selected={tab === "resources"} onClick={() => onTabChange("resources")}>
+            <FileText size={16} /> Teaching resources <span className="tpt-count">{resources.length}</span>
+          </button>
+        </div>
+        {tab === "resources" ? (
+          <ResourceBrowser
+            resources={resources}
+            options={resourceOptions}
+            ownedIds={ownedResourceIds}
+            wishlistIds={wishlistIds}
+            onToggleWishlist={onToggleWishlist}
+            onOpen={onOpenItem}
+            onBuy={onBuyResource}
+            onDownload={onDownloadResource}
+            onSellClick={onSellResources}
+          />
+        ) : (
+        <>
         <LiveTestsSection scheduledTests={scheduledTests} purchasedIds={purchasedIds} onJoinLive={onJoinLive} onBuy={onBuy} onViewLeaderboard={onViewLeaderboard} />
         <PassesSection passes={allAccessPasses} myGrants={myAccessGrants} onBuyPass={onBuyPass} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
@@ -1390,14 +1351,15 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
             Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} tests
           </div>
         )}
-        <div className="grid-cards">
+        <div className="tpt-grid">
           {pageTests.map((t) => (
-            <TestCard
+            <ProductCard
               key={t.id}
-              test={t}
-              purchased={purchasedIds.has(t.id)}
+              item={asTest(t)}
+              owned={purchasedIds.has(t.id)}
               onBuy={() => onBuy(t)}
-              onOpenLearning={goLearning}
+              onOwnedAction={goLearning}
+              onOpen={onOpenItem}
               wishlisted={wishlistIds?.has(t.id)}
               onToggleWishlist={onToggleWishlist ? () => onToggleWishlist(t.id, wishlistIds?.has(t.id)) : undefined}
             />
@@ -1441,6 +1403,8 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
               ))}
             </div>
           </>
+        )}
+        </>
         )}
       </div>
     </div>
@@ -2172,7 +2136,7 @@ function TestAnalyticsView({ testId, testTitle, onBack }) {
 }
 
 
-function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon }) {
+function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon, myResources = [], resourcesPanel, followerCount }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [bundleWizardOpen, setBundleWizardOpen] = useState(false);
   const [analyticsTest, setAnalyticsTest] = useState(null);
@@ -2218,7 +2182,12 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
     const earn = Math.round(b.gross * (sellerShare / 100));
     return { bundle: b, units: b.unitsSold, gross: b.gross, earn, fee: b.gross - earn };
   });
-  const totals = [...rows, ...bundleRows].reduce((a, r) => ({ gross: a.gross + r.gross, earn: a.earn + r.earn, fee: a.fee + r.fee, units: a.units + r.units }), { gross: 0, earn: 0, fee: 0, units: 0 });
+  // Resource sales count toward earnings and payouts exactly like test sales.
+  const resourceRows = myResources.map((r) => {
+    const earn = Math.round((r.gross || 0) * (sellerShare / 100));
+    return { gross: r.gross || 0, earn, fee: (r.gross || 0) - earn, units: r.unitsSold || 0 };
+  });
+  const totals = [...rows, ...bundleRows, ...resourceRows].reduce((a, r) => ({ gross: a.gross + r.gross, earn: a.earn + r.earn, fee: a.fee + r.fee, units: a.units + r.units }), { gross: 0, earn: 0, fee: 0, units: 0 });
   const available = Math.max(0, totals.earn + (payouts.referralBonusTotal || 0) - payouts.withdrawn);
 
   return (
@@ -2238,7 +2207,10 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
         <div className="stub"><div className="stub-label">Gross sales</div><div className="stub-value">₹{totals.gross.toLocaleString("en-IN")}</div></div>
         <div className="stub"><div className="stub-label">Your earnings ({sellerShare}%)</div><div className="stub-value" style={{ color: T.green }}>₹{totals.earn.toLocaleString("en-IN")}</div></div>
         <div className="stub"><div className="stub-label">Platform fee ({100 - sellerShare}%)</div><div className="stub-value" style={{ color: T.muted }}>₹{totals.fee.toLocaleString("en-IN")}</div></div>
-        <div className="stub"><div className="stub-label">Sold (tests + bundles)</div><div className="stub-value">{totals.units}</div></div>
+        <div className="stub"><div className="stub-label">Sold (tests, bundles, resources)</div><div className="stub-value">{totals.units}</div></div>
+        {followerCount !== null && followerCount !== undefined && (
+          <div className="stub"><div className="stub-label">Store followers</div><div className="stub-value">{followerCount.toLocaleString("en-IN")}</div></div>
+        )}
       </div>
 
       <PayoutPanel
@@ -2307,6 +2279,8 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
           );
         })}
       </div>
+
+      {resourcesPanel}
 
       {mySellerBundles.length > 0 && (
         <div style={{ marginTop: 30 }}>
@@ -3024,8 +2998,8 @@ function ProgressDashboard({ attempts }) {
 }
 
 
-function MyLearning({ tests, fullTests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin, percentileByAttemptId }) {
-  const [tab, setTab] = useState("tests"); // "tests" | "progress"
+function MyLearning({ tests, fullTests, purchasedIds, attempts, onStart, onExitToMarket, activeTestId, testState, onSubmitAttempt, onExitRunner, reportAttemptId, onRate, onOpenReport, clearReport, session, onRequireLogin, percentileByAttemptId, initialTab, resourcesPanel }) {
+  const [tab, setTab] = useState(initialTab || "tests"); // "tests" | "resources" | "progress"
   const myTests = tests.filter((t) => purchasedIds.has(t.id));
 
   if (!session || session.role !== "buyer") {
@@ -3078,6 +3052,17 @@ function MyLearning({ tests, fullTests, purchasedIds, attempts, onStart, onExitT
           My Tests
         </button>
         <button
+          onClick={() => setTab("resources")}
+          style={{
+            background: "none", border: "none", cursor: "pointer", padding: "8px 4px 12px", fontSize: 14,
+            fontFamily: "var(--font-body)", fontWeight: tab === "resources" ? 700 : 500,
+            color: tab === "resources" ? T.ink : T.muted, borderBottom: tab === "resources" ? `2px solid ${T.saffronDeep}` : "2px solid transparent",
+            marginLeft: 12,
+          }}
+        >
+          My Resources
+        </button>
+        <button
           onClick={() => setTab("progress")}
           style={{
             background: "none", border: "none", cursor: "pointer", padding: "8px 4px 12px", fontSize: 14,
@@ -3092,6 +3077,8 @@ function MyLearning({ tests, fullTests, purchasedIds, attempts, onStart, onExitT
 
       {tab === "progress" ? (
         <ProgressDashboard attempts={attempts} />
+      ) : tab === "resources" ? (
+        resourcesPanel
       ) : (
         <>
           {myTests.length === 0 && (
@@ -4280,9 +4267,28 @@ function SiteFooter({ onNavigate }) {
 /* ---------------------------------------------------------------------- */
 /* App shell                                                              */
 /* ---------------------------------------------------------------------- */
-function AppShell({ routeTestId, routeRole }) {
+// Reads which product page (if any) a URL path points at.
+function productFromPath(pathname) {
+  const m = /^\/(tests|resources)\/([^/]+)/.exec(pathname || "");
+  return m ? { kind: m[1] === "resources" ? "resource" : "test", id: decodeURIComponent(m[2]) } : null;
+}
+
+function AppShell({ routeTestId, routeResourceId, routeRole }) {
   const [role, setRole] = useState(routeRole || "marketplace");
   const [tests, setTests] = useState(seedTests());
+  const [testsLoaded, setTestsLoaded] = useState(false);
+  const [resources, setResources] = useState([]);
+  const [resourcesLoaded, setResourcesLoaded] = useState(false);
+  const [resourceOptions, setResourceOptions] = useState(null);
+  const [resourcePurchases, setResourcePurchases] = useState([]);
+  const [sellerResources, setSellerResources] = useState([]);
+  const [sellerFollowers, setSellerFollowers] = useState(null);
+  const [marketTab, setMarketTab] = useState(() => {
+    if (routeResourceId) return "resources";
+    if (typeof window === "undefined") return "tests";
+    return new URLSearchParams(window.location.search).get("tab") === "resources" ? "resources" : "tests";
+  });
+  const [learningTab, setLearningTab] = useState("tests");
   const [bundles, setBundles] = useState([]);
   const [ads, setAds] = useState([]);
   const [marketplaceAds, setMarketplaceAds] = useState([]);
@@ -4360,6 +4366,41 @@ function AppShell({ routeTestId, routeRole }) {
     return new URLSearchParams(window.location.search).get("test") || "";
   });
 
+  // Which product page is open: { kind: "test" | "resource", id } or null.
+  // Driven by the URL so links, refresh and the back button all work.
+  const [productView, setProductView] = useState(() => {
+    if (routeResourceId) return { kind: "resource", id: routeResourceId };
+    if (sharedItemId) return { kind: "test", id: sharedItemId };
+    return null;
+  });
+  useEffect(() => {
+    const onPop = () => {
+      const pv = productFromPath(window.location.pathname);
+      setProductView(pv);
+      if (pv) setRole("marketplace");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const openItem = (item) => {
+    const path = itemPath(item);
+    if (window.location.pathname !== path) window.history.pushState({}, "", path);
+    setProductView({ kind: item.kind, id: item.id });
+    setRole("marketplace");
+  };
+  const closeProduct = () => {
+    const tabQuery = productView?.kind === "resource" ? "/?tab=resources" : "/";
+    window.history.pushState({}, "", tabQuery);
+    if (productView?.kind === "resource") setMarketTab("resources");
+    setProductView(null);
+  };
+  const productItem = productView
+    ? (productView.kind === "resource" ? asResource(resources.find((r) => r.id === productView.id)) : asTest(tests.find((t) => t.id === productView.id)))
+    : null;
+  // A /tests/:id link can also point at a bundle; those still use the
+  // marketplace's "Shared with you" section rather than a product page.
+  const productIsBundle = productView?.kind === "test" && !productItem && bundles.some((b) => b.id === productView.id);
+
   // SEO: this is a client-rendered app, so search engines only see whatever
   // document.title/meta description are set to at the moment they render the
   // page — there's no per-route server-rendered HTML. Updating these on every
@@ -4373,9 +4414,11 @@ function AppShell({ routeTestId, routeRole }) {
       tag.setAttribute("content", content);
     };
 
-    const sharedTest = sharedItemId ? tests.find((t) => t.id === sharedItemId) : null;
-    const sharedBundle = !sharedTest && sharedItemId ? bundles.find((b) => b.id === sharedItemId) : null;
-    const sharedItem = sharedTest || sharedBundle;
+    const viewId = productView?.id || "";
+    const sharedTest = productView?.kind === "test" && viewId ? tests.find((t) => t.id === viewId) : null;
+    const sharedBundle = productView?.kind === "test" && !sharedTest && viewId ? bundles.find((b) => b.id === viewId) : null;
+    const sharedResource = productView?.kind === "resource" ? resources.find((r) => r.id === viewId) : null;
+    const sharedItem = sharedTest || sharedBundle || sharedResource;
 
     // On a /tests/:id page whose test hasn't loaded yet, leave the head tags
     // exactly as they are. For crawlers, frontend-server.js already put this
@@ -4383,13 +4426,16 @@ function AppShell({ routeTestId, routeRole }) {
     // here with the homepage defaults (even for a moment) is what told Google
     // "this page is a duplicate of the homepage" whenever its renderer
     // snapshotted the page before /api/tests came back.
-    if (sharedItemId && !sharedItem) return;
+    if (viewId && !sharedItem) return;
 
     let title = "TestMandi — Buy & Sell MCQ Practice Tests for NEET, JEE, UPSC, SSC & More";
     let description = "TestMandi is India's marketplace for exam-prep MCQ tests. Buy practice tests for NEET, JEE Main, UPSC, SSC, Banking, GATE, and 30+ competitive exams — or sell your own tests as a teacher or institute.";
     let noindex = false;
 
-    if (sharedItem) {
+    if (sharedResource) {
+      title = `${sharedResource.title} — ${sharedResource.price ? `₹${sharedResource.price}` : "Free"} | TestMandi`;
+      description = (sharedResource.description || `${sharedResource.resourceType} for ${sharedResource.grade} on TestMandi.`).slice(0, 160);
+    } else if (sharedItem) {
       title = `${sharedItem.title} — ₹${sharedItem.price} | TestMandi`;
       description = (sharedItem.description || `Practice test on TestMandi with ${sharedItem.questionCount ?? sharedItem.questions?.length ?? ""} questions.`).slice(0, 160);
     } else if (role === "seller") { title = "Seller Studio — TestMandi"; description = "Create and sell MCQ practice tests on TestMandi."; }
@@ -4414,14 +4460,16 @@ function AppShell({ routeTestId, routeRole }) {
     // which is exactly what was suppressing them from being indexed on
     // their own.
     const origin = typeof window !== "undefined" ? window.location.origin : "https://testmandi.in";
-    const canonicalUrl = sharedItem
+    const canonicalUrl = sharedResource
+      ? `${origin}${itemPath(asResource(sharedResource))}`
+      : sharedItem
       ? `${origin}/tests/${sharedItem.id}/${slugify(sharedItem.title)}`
       : (role === "privacy" || role === "terms") ? `${origin}/${role}` : `${origin}/`;
     let canonicalTag = document.querySelector('link[rel="canonical"]');
     if (!canonicalTag) { canonicalTag = document.createElement("link"); canonicalTag.setAttribute("rel", "canonical"); document.head.appendChild(canonicalTag); }
     canonicalTag.setAttribute("href", canonicalUrl);
     setMeta("og:url", canonicalUrl, true);
-  }, [role, sharedItemId, tests, bundles]);
+  }, [role, productView, tests, bundles, resources]);
 
   const [authAction, setAuthAction] = useState(() => {
     if (typeof window === "undefined") return null;
@@ -4465,6 +4513,7 @@ function AppShell({ routeTestId, routeRole }) {
   useEffect(() => {
     if (!session) {
       setPurchases([]); setBundlePurchases([]); setAttempts([]); setRatedTestIds(new Set());
+      setResourcePurchases([]); setSellerResources([]);
       setSellerTests([]); setSellerBundles([]); setSellerPayouts({ bankDetails: null, history: [], grossEarnings: 0, withdrawn: 0 });
       setAdminAccounts([]); setAdminData({ tests: [], bundles: [], purchases: [], bundlePurchases: [], ads: [] });
       return;
@@ -4476,11 +4525,14 @@ function AppShell({ routeTestId, routeRole }) {
       api.getMyBundlePurchases().then((d) => setBundlePurchases(d.bundlePurchases)).catch(() => {});
       api.getMyAttempts().then((d) => setAttempts(d.attempts)).catch(() => {});
       api.getMyAccessGrants().then((d) => setMyAccessGrants(d.grants)).catch(() => {});
+      api.getMyResourcePurchases().then((d) => setResourcePurchases(d.resourcePurchases)).catch(() => {});
     } else if (session.role === "seller") {
       api.getMyTests().then((d) => setSellerTests(d.tests)).catch(() => {});
       api.getMyBundles().then((d) => setSellerBundles(d.bundles)).catch(() => {});
       api.getMyPayouts().then((d) => setSellerPayouts(d)).catch(() => {});
       api.getMyCoupons().then((d) => setMyCoupons(d.coupons)).catch(() => {});
+      api.getMyResources().then((d) => setSellerResources(d.resources)).catch(() => {});
+      api.getMyFollowers().then((d) => setSellerFollowers(d.followerCount)).catch(() => {});
     } else if (session.role === "advertiser") {
       api.getMyAds().then((d) => setAds(d.ads)).catch(() => {});
     } else if (session.role === "admin") {
@@ -4552,12 +4604,14 @@ function AppShell({ routeTestId, routeRole }) {
     // tests list) must not stop categories, bundles, ads etc. from showing.
     const loaders = [
       api.getCategories().then((d) => setCategories(d.categories)),
-      api.getTests().then((d) => setTests(d.tests)),
+      api.getTests().then((d) => setTests(d.tests)).finally(() => setTestsLoaded(true)),
       api.getBundles().then((d) => setBundles(d.bundles)),
       api.getActiveAds().then((d) => setMarketplaceAds(d.ads)),
       api.getSettings().then((d) => setSellerShare(d.sellerSharePercent)),
       api.getScheduledTests().then((d) => setScheduledTests(d.scheduledTests)),
       api.getAllAccessPasses().then((d) => setAllAccessPasses(d.passes)),
+      api.getResources().then((d) => setResources(d.resources)).finally(() => setResourcesLoaded(true)),
+      api.getResourceOptions().then(setResourceOptions),
     ];
     Promise.allSettled(loaders).then((results) => {
       // Only warn that the backend is down if the core data (categories + tests) both failed.
@@ -4578,6 +4632,8 @@ function AppShell({ routeTestId, routeRole }) {
   // record it created (a purchase, bundle purchase, or ad). We just fold that
   // real record into local state — no more client-side price or referral logic.
   const handleCheckoutSuccess = (result) => {
+    // Leaving the product page for My Learning / Ads Studio — reset the URL.
+    if (checkoutKind !== "ad" && productView) { setProductView(null); window.history.pushState({}, "", "/"); }
     if (checkoutKind === "ad") {
       if (result?.ad) setAds((a) => [...a, result.ad]);
       api.getActiveAds().then((d) => setMarketplaceAds(d.ads)).catch(() => {});
@@ -4585,6 +4641,12 @@ function AppShell({ routeTestId, routeRole }) {
       setRole("ads");
     } else if (checkoutKind === "bundle") {
       if (result?.purchase) setBundlePurchases((bp) => [...bp, result.purchase]);
+      setRole("learning");
+    } else if (checkoutKind === "resource") {
+      if (result?.purchase) setResourcePurchases((rp) => [result.purchase, ...rp]);
+      setLearningTab("resources");
+      setProductView(null);
+      window.history.pushState({}, "", "/");
       setRole("learning");
     } else if (checkoutKind === "pass") {
       if (result?.grant) setMyAccessGrants((g) => [...g.filter((x) => x.sellerEmail !== result.grant.sellerEmail), result.grant]);
@@ -4675,6 +4737,50 @@ function AppShell({ routeTestId, routeRole }) {
       if (currentlyWishlisted) await api.removeFromWishlist(testId);
       else await api.addToWishlist(testId);
     } catch (err) { /* best-effort — see comment above */ }
+  };
+
+  const ownedResourceIds = useMemo(() => {
+    if (!session) return new Set();
+    if (session.role === "buyer") return new Set(resourcePurchases.map((p) => p.resourceId));
+    if (session.role === "seller") return new Set(resources.filter((r) => r.sellerEmail === session.email).map((r) => r.id));
+    return new Set();
+  }, [session, resourcePurchases, resources]);
+
+  const downloadResource = async (r) => {
+    try {
+      const { url } = await api.getResourceDownload(r.id);
+      window.location.href = url;
+    } catch (err) {
+      window.alert(err.message || "Couldn't start the download. Please try again.");
+    }
+  };
+
+  const wishlistIdSet = session?.role === "buyer" ? new Set(session.wishlistTestIds || []) : null;
+
+  // Follow a seller's store. Logged-out visitors are asked to log in first.
+  // Returns the new follower count so the product page can show it.
+  const followingSet = new Set(session?.followingSellers || []);
+  const toggleFollow = async (sellerEmail, currentlyFollowing) => {
+    if (!session || !["buyer", "seller"].includes(session.role)) { openAuth("buyer", "login"); return null; }
+    setSession((s) => ({
+      ...s,
+      followingSellers: currentlyFollowing
+        ? (s.followingSellers || []).filter((e) => e !== sellerEmail)
+        : [...(s.followingSellers || []), sellerEmail],
+    }));
+    try {
+      const { followerCount } = currentlyFollowing ? await api.unfollowSeller(sellerEmail) : await api.followSeller(sellerEmail);
+      return followerCount;
+    } catch (err) {
+      // Revert the optimistic change if the server said no.
+      setSession((s) => ({
+        ...s,
+        followingSellers: currentlyFollowing
+          ? [...(s.followingSellers || []), sellerEmail]
+          : (s.followingSellers || []).filter((e) => e !== sellerEmail),
+      }));
+      return null;
+    }
   };
 
   const currentSellerName = session?.role === "seller" ? (session.businessName || session.name) : null;
@@ -4898,6 +5004,8 @@ function AppShell({ routeTestId, routeRole }) {
 
         .referral-promo { display: flex; gap: 8px; align-items: flex-start; background: rgba(232,163,61,0.12); border: 1px solid ${T.saffron}; border-radius: 8px; padding: 10px 12px; margin-top: 14px; font-size: 12.5px; color: ${T.ink}; line-height: 1.4; }
 
+        ${TPT_CSS}
+
         /* ---------------------------------------------------------------- */
         /* Mobile                                                           */
         /* ---------------------------------------------------------------- */
@@ -4943,7 +5051,11 @@ function AppShell({ routeTestId, routeRole }) {
         </div>
         <div className="nav-tabs">
           {NAV.map((n) => (
-            <button key={n.key} className={`nav-tab ${role === n.key ? "active" : ""}`} onClick={() => setRole(n.key)}>
+            <button key={n.key} className={`nav-tab ${role === n.key ? "active" : ""}`} onClick={() => {
+              if (productView) { setProductView(null); window.history.pushState({}, "", "/"); }
+              if (n.key === "learning") setLearningTab("tests");
+              setRole(n.key);
+            }}>
               <n.icon size={15} /> <span className="nav-tab-label">{n.label}</span>
             </button>
           ))}
@@ -4980,7 +5092,32 @@ function AppShell({ routeTestId, routeRole }) {
         <LeaderboardView scheduledTestId={leaderboardId} onBack={() => setLeaderboardId(null)} />
       ) : (
       <>
-      {role === "marketplace" && (
+      {role === "marketplace" && productView && !productIsBundle && (
+        <ProductPage
+          item={productItem}
+          loading={!productItem && (productView.kind === "resource" ? !resourcesLoaded : !testsLoaded)}
+          notFound={!productItem && (productView.kind === "resource" ? resourcesLoaded : testsLoaded)}
+          allTests={tests.filter((t) => !isBlockedTest(t)).map(asTest)}
+          allResources={resources.map(asResource)}
+          bundles={bundles}
+          purchasedBundleIds={purchasedBundleIds}
+          owned={productItem ? (productItem.kind === "resource" ? ownedResourceIds.has(productItem.id) : purchasedIds.has(productItem.id)) : false}
+          wishlisted={productItem ? wishlistIdSet?.has(productItem.id) : false}
+          onToggleWishlist={session?.role === "buyer" ? toggleWishlist : undefined}
+          onBuy={() => startCheckout(productItem, productItem.kind === "resource" ? "resource" : "test")}
+          onBuyBundle={(b) => startCheckout(b, "bundle")}
+          onOwnedAction={() => {
+            if (productItem.kind === "resource") downloadResource(productItem);
+            else { setProductView(null); window.history.pushState({}, "", "/"); setLearningTab("tests"); setRole("learning"); }
+          }}
+          onOpen={openItem}
+          onBack={closeProduct}
+          session={session}
+          following={productItem ? followingSet.has(productItem.sellerEmail) : false}
+          onToggleFollow={toggleFollow}
+        />
+      )}
+      {role === "marketplace" && (!productView || productIsBundle) && (
         <Marketplace
           tests={tests}
           bundles={bundles}
@@ -4992,15 +5129,24 @@ function AppShell({ routeTestId, routeRole }) {
           goLearning={() => setRole("learning")}
           sellerShare={sellerShare}
           categories={categories}
-          sharedItemId={sharedItemId}
+          sharedItemId={productIsBundle ? productView.id : ""}
           scheduledTests={scheduledTests}
           onJoinLive={startLiveTest}
           onViewLeaderboard={setLeaderboardId}
           allAccessPasses={allAccessPasses}
           myAccessGrants={myAccessGrants}
           onBuyPass={(p) => startCheckout({ id: p.id, title: `All-access pass — ${p.sellerName}`, price: p.price, sellerName: p.sellerName }, "pass")}
-          wishlistIds={session?.role === "buyer" ? new Set(session.wishlistTestIds || []) : null}
+          wishlistIds={wishlistIdSet}
           onToggleWishlist={session?.role === "buyer" ? toggleWishlist : undefined}
+          resources={resources.map(asResource)}
+          resourceOptions={resourceOptions}
+          ownedResourceIds={ownedResourceIds}
+          onOpenItem={openItem}
+          onBuyResource={(r) => startCheckout(r, "resource")}
+          onDownloadResource={downloadResource}
+          onSellResources={() => setRole("seller")}
+          tab={marketTab}
+          onTabChange={setMarketTab}
         />
       )}
       {role === "seller" && (
@@ -5024,6 +5170,28 @@ function AppShell({ routeTestId, routeRole }) {
           myCoupons={myCoupons}
           onCreateCoupon={createCoupon}
           onDeleteCoupon={deleteCoupon}
+          myResources={sellerResources}
+          followerCount={sellerFollowers}
+          resourcesPanel={session?.role === "seller" ? (
+            <SellerResourcesPanel
+              myResources={sellerResources}
+              sellerShare={sellerShare}
+              categories={categories}
+              onPublished={(r) => {
+                setSellerResources((x) => [{ ...r, unitsSold: 0, gross: 0 }, ...x]);
+                setResources((x) => [r, ...x]);
+              }}
+              onUpdated={(r) => {
+                setSellerResources((x) => x.map((y) => (y.id === r.id ? { ...y, ...r } : y)));
+                setResources((x) => x.map((y) => (y.id === r.id ? r : y)));
+              }}
+              onRemoved={(id) => {
+                setSellerResources((x) => x.filter((y) => y.id !== id));
+                setResources((x) => x.filter((y) => y.id !== id));
+              }}
+              onOpen={openItem}
+            />
+          ) : null}
         />
       )}
       {role === "learning" && (
@@ -5049,6 +5217,17 @@ function AppShell({ routeTestId, routeRole }) {
           session={session}
           onRequireLogin={requireLoginFor}
           percentileByAttemptId={percentileByAttemptId}
+          initialTab={learningTab}
+          resourcesPanel={
+            <MyResourcesPanel
+              resources={resources.map(asResource)}
+              purchases={resourcePurchases}
+              onOpen={openItem}
+              onBrowse={() => { setMarketTab("resources"); setRole("marketplace"); }}
+              onDownload={downloadResource}
+              onRated={(r) => setResources((x) => x.map((y) => (y.id === r.id ? r : y)))}
+            />
+          }
         />
       )}
       {role === "ads" && (
@@ -5217,12 +5396,19 @@ function TestRoute() {
   return <AppShell routeTestId={id} />;
 }
 
+function ResourceRoute() {
+  const { id } = useParams();
+  return <AppShell routeResourceId={id} />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/tests/:id" element={<TestRoute />} />
         <Route path="/tests/:id/:slug" element={<TestRoute />} />
+        <Route path="/resources/:id" element={<ResourceRoute />} />
+        <Route path="/resources/:id/:slug" element={<ResourceRoute />} />
         {/* Real, directly-linkable URLs — needed so Google can index them and
             so they can be submitted as the required policy links in Google
             Ads account/campaign setup, not just reachable as an in-app tab. */}
