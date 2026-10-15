@@ -2136,7 +2136,7 @@ function TestAnalyticsView({ testId, testTitle, onBack }) {
 }
 
 
-function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon, myResources = [], resourcesPanel }) {
+function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, session, payouts, onSaveBank, onWithdraw, onRequireLogin, categories, onPublishBundle, scheduledTests, onScheduleTest, onViewLeaderboard, allAccessPasses, onCreatePass, myCoupons, onCreateCoupon, onDeleteCoupon, myResources = [], resourcesPanel, followerCount }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [bundleWizardOpen, setBundleWizardOpen] = useState(false);
   const [analyticsTest, setAnalyticsTest] = useState(null);
@@ -2208,6 +2208,9 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
         <div className="stub"><div className="stub-label">Your earnings ({sellerShare}%)</div><div className="stub-value" style={{ color: T.green }}>₹{totals.earn.toLocaleString("en-IN")}</div></div>
         <div className="stub"><div className="stub-label">Platform fee ({100 - sellerShare}%)</div><div className="stub-value" style={{ color: T.muted }}>₹{totals.fee.toLocaleString("en-IN")}</div></div>
         <div className="stub"><div className="stub-label">Sold (tests, bundles, resources)</div><div className="stub-value">{totals.units}</div></div>
+        {followerCount !== null && followerCount !== undefined && (
+          <div className="stub"><div className="stub-label">Store followers</div><div className="stub-value">{followerCount.toLocaleString("en-IN")}</div></div>
+        )}
       </div>
 
       <PayoutPanel
@@ -4279,6 +4282,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
   const [resourceOptions, setResourceOptions] = useState(null);
   const [resourcePurchases, setResourcePurchases] = useState([]);
   const [sellerResources, setSellerResources] = useState([]);
+  const [sellerFollowers, setSellerFollowers] = useState(null);
   const [marketTab, setMarketTab] = useState(() => {
     if (routeResourceId) return "resources";
     if (typeof window === "undefined") return "tests";
@@ -4528,6 +4532,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
       api.getMyPayouts().then((d) => setSellerPayouts(d)).catch(() => {});
       api.getMyCoupons().then((d) => setMyCoupons(d.coupons)).catch(() => {});
       api.getMyResources().then((d) => setSellerResources(d.resources)).catch(() => {});
+      api.getMyFollowers().then((d) => setSellerFollowers(d.followerCount)).catch(() => {});
     } else if (session.role === "advertiser") {
       api.getMyAds().then((d) => setAds(d.ads)).catch(() => {});
     } else if (session.role === "admin") {
@@ -4751,6 +4756,32 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
   };
 
   const wishlistIdSet = session?.role === "buyer" ? new Set(session.wishlistTestIds || []) : null;
+
+  // Follow a seller's store. Logged-out visitors are asked to log in first.
+  // Returns the new follower count so the product page can show it.
+  const followingSet = new Set(session?.followingSellers || []);
+  const toggleFollow = async (sellerEmail, currentlyFollowing) => {
+    if (!session || !["buyer", "seller"].includes(session.role)) { openAuth("buyer", "login"); return null; }
+    setSession((s) => ({
+      ...s,
+      followingSellers: currentlyFollowing
+        ? (s.followingSellers || []).filter((e) => e !== sellerEmail)
+        : [...(s.followingSellers || []), sellerEmail],
+    }));
+    try {
+      const { followerCount } = currentlyFollowing ? await api.unfollowSeller(sellerEmail) : await api.followSeller(sellerEmail);
+      return followerCount;
+    } catch (err) {
+      // Revert the optimistic change if the server said no.
+      setSession((s) => ({
+        ...s,
+        followingSellers: currentlyFollowing
+          ? [...(s.followingSellers || []), sellerEmail]
+          : (s.followingSellers || []).filter((e) => e !== sellerEmail),
+      }));
+      return null;
+    }
+  };
 
   const currentSellerName = session?.role === "seller" ? (session.businessName || session.name) : null;
 
@@ -5082,6 +5113,8 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           onOpen={openItem}
           onBack={closeProduct}
           session={session}
+          following={productItem ? followingSet.has(productItem.sellerEmail) : false}
+          onToggleFollow={toggleFollow}
         />
       )}
       {role === "marketplace" && (!productView || productIsBundle) && (
@@ -5138,6 +5171,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           onCreateCoupon={createCoupon}
           onDeleteCoupon={deleteCoupon}
           myResources={sellerResources}
+          followerCount={sellerFollowers}
           resourcesPanel={session?.role === "seller" ? (
             <SellerResourcesPanel
               myResources={sellerResources}

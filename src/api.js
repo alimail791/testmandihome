@@ -227,6 +227,12 @@ export const api = {
   // progress). Retries once after refreshing an expired access token.
   uploadResource: (formData, onProgress) => uploadWithProgress("/api/resources", formData, onProgress),
 
+  // ---- follow a seller ----
+  getSellerProfile: (email) => request(`/api/sellers/${encodeURIComponent(email)}/profile`, { auth: false }),
+  followSeller: (email) => request(`/api/sellers/${encodeURIComponent(email)}/follow`, { method: "POST" }),
+  unfollowSeller: (email) => request(`/api/sellers/${encodeURIComponent(email)}/follow`, { method: "DELETE" }),
+  getMyFollowers: () => request("/api/sellers/me/followers"),
+
   // ---- chat ----
   chat: (messages, roleHint, name) => request("/api/chat", { method: "POST", body: { messages, roleHint, name }, auth: false }),
 };

@@ -307,7 +307,9 @@ function PreviewModal({ item, onClose, onBuy, owned }) {
 export function ProductPage({
   item, loading, notFound, allTests, allResources, bundles, owned, purchasedBundleIds,
   wishlisted, onToggleWishlist, onBuy, onBuyBundle, onOwnedAction, onOpen, onBack, session,
+  following, onToggleFollow,
 }) {
+  const [followers, setFollowers] = useState(null);
   const [reviews, setReviews] = useState(null);
   const [slot, setSlot] = useState("cover");
   const [showPreview, setShowPreview] = useState(false);
@@ -324,6 +326,12 @@ export function ProductPage({
     load.then((d) => setReviews(d.reviews || [])).catch(() => setReviews([]));
     window.scrollTo({ top: 0 });
   }, [item?.id, item?.kind]);
+
+  useEffect(() => {
+    setFollowers(null);
+    if (!item?.sellerEmail) return;
+    api.getSellerProfile(item.sellerEmail).then((p) => setFollowers(p.followerCount)).catch(() => {});
+  }, [item?.sellerEmail]);
 
   useEffect(() => {
     const el = buyRef.current;
@@ -365,6 +373,11 @@ export function ProductPage({
   };
   const toReviews = () => reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   const toggleWish = onToggleWishlist ? () => onToggleWishlist(item.id, wishlisted) : null;
+  const isOwnStore = session?.email && session.email === item.sellerEmail;
+  const toggleFollow = async () => {
+    const n = await onToggleFollow(item.sellerEmail, following);
+    if (typeof n === "number") setFollowers(n);
+  };
 
   const primary = owned ? (
     <button ref={buyRef} type="button" className="tpt-btn tpt-btn-cart tpt-btn-lg" onClick={onOwnedAction}>
@@ -430,10 +443,16 @@ export function ProductPage({
           <RatingLine item={item} onClick={item.ratingCount ? toReviews : undefined} />
           <div className="tpt-seller-line">
             <SellerAvatar name={item.sellerName} size={34} />
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="tpt-seller-name">{item.sellerName}</div>
               <div style={{ fontSize: 12.5, color: T.muted }}>{more.length ? `${more.length + 1}+ ${isRes ? "resources" : "tests"} on TestMandi` : "Seller on TestMandi"}</div>
             </div>
+            {item.sellerEmail && !isOwnStore && onToggleFollow && (
+              <button type="button" className="tpt-follow" aria-pressed={!!following} onClick={toggleFollow}>
+                <Star size={15} fill={following ? "currentColor" : "none"} /> {following ? "Following" : "Follow"}
+              </button>
+            )}
+            {followers !== null && <span className="tpt-followers">{fmtCount(followers)} follower{followers === 1 ? "" : "s"}</span>}
           </div>
           <div className={`tpt-bigprice ${free ? "tpt-free" : ""}`}>{priceLabel(item.price)}</div>
           {primary}
@@ -967,7 +986,10 @@ export const TPT_CSS = `
 
   .tpt-side { display: grid; gap: 14px; min-width: 0; }
   .tpt-side h1 { font-family: var(--font-display); font-size: 27px; line-height: 1.2; color: ${T.ink}; margin: 0; text-wrap: balance; }
-  .tpt-seller-line { display: flex; align-items: center; gap: 10px; }
+  .tpt-seller-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tpt-follow { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; padding: 4px 2px; color: #2B6BE0; font-weight: 600; font-size: 14px; }
+  .tpt-follow[aria-pressed="true"] { color: ${T.green}; }
+  .tpt-followers { font-size: 13px; color: ${T.muted}; }
   .tpt-seller-name { font-weight: 600; font-size: 15.5px; color: ${T.ink}; }
   .tpt-bigprice { font-family: var(--font-display); font-size: 34px; font-weight: 700; color: ${T.ink}; line-height: 1; }
   .tpt-buyrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; }
