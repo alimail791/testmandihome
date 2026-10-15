@@ -62,6 +62,68 @@ async function getAllTests() {
   return testsCache.data;
 }
 
+let resourcesCache = { data: null, fetchedAt: 0 };
+async function getAllResources() {
+  if (resourcesCache.data && Date.now() - resourcesCache.fetchedAt < TESTS_TTL_MS) return resourcesCache.data;
+  try {
+    const res = await fetch(`${API_BASE}/api/resources`);
+    if (!res.ok) throw new Error(`API responded ${res.status}`);
+    const json = await res.json();
+    resourcesCache = { data: json.resources || [], fetchedAt: Date.now() };
+  } catch (err) {
+    console.error("frontend-server: failed to fetch resources for prerender:", err.message);
+    if (!resourcesCache.data) resourcesCache.data = [];
+  }
+  return resourcesCache.data;
+}
+
+function resourceUrl(r) {
+  return `/resources/${r.id}/${slugify(r.title)}`;
+}
+
+// Same idea as renderTestPageHtml, for a teaching resource (worksheet, notes…).
+function renderResourcePageHtml(template, r, origin, allResources = []) {
+  const price = Number(r.price) || 0;
+  const facts = [r.resourceType, r.grade, r.subject, r.language, r.pages ? `${r.pages} pages` : null].filter(Boolean).join(" · ");
+  const description = `${r.description || r.title} — ${facts}. ${price ? `₹${price}` : "Free"} on TestMandi.`.slice(0, 300);
+  const title = `${r.title} — ${price ? `₹${price}` : "Free"} | TestMandi`;
+  const url = `${origin}${resourceUrl(r)}`;
+  const image = r.hasCover ? `${API_BASE}/api/resources/${r.id}/image/cover` : `${origin}/og-image.png`;
+
+  let html = template;
+  html = html.replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(title)}</title>`);
+  html = html.replace(/(<meta name="description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`);
+  html = html.replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${escapeHtml(title)}$2`);
+  html = html.replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`);
+  html = html.replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${escapeHtml(url)}$2`);
+  html = html.replace(/(<meta property="og:image" content=")[^"]*(")/, `$1${escapeHtml(image)}$2`);
+  html = html.replace(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${escapeHtml(title)}$2`);
+  html = html.replace(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`);
+  if (!/<link rel="canonical"/.test(html)) {
+    html = html.replace("</head>", `<link rel="canonical" href="${escapeHtml(url)}" />\n</head>`);
+  } else {
+    html = html.replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${escapeHtml(url)}$2`);
+  }
+  const related = allResources.filter((x) => x.id !== r.id && (x.subject === r.subject || x.grade === r.grade)).slice(0, 12);
+  const crawlableBlock = `
+    <div id="prerendered-seo-content">
+      <h1>${escapeHtml(r.title)}</h1>
+      <p>${escapeHtml(description)}</p>
+      ${r.tags?.length ? `<p>Tags: ${r.tags.map(escapeHtml).join(", ")}</p>` : ""}
+      ${r.sellerName ? `<p>By ${escapeHtml(r.sellerName)}</p>` : ""}
+      ${related.length ? `<nav aria-label="Related resources"><h2>More teaching resources</h2><ul>${related.map((x) => `<li><a href="${escapeHtml(resourceUrl(x))}">${escapeHtml(x.title)}</a></li>`).join("")}</ul></nav>` : ""}
+      <p><a href="/">Browse tests and teaching resources on TestMandi</a></p>
+    </div>`;
+  html = html.replace('<div id="root"></div>', `<div id="root">${crawlableBlock}</div>`);
+  const jsonLd = { "@context": "https://schema.org", "@type": "Product", name: r.title, description, url, image,
+    brand: { "@type": "Brand", name: r.sellerName || "TestMandi" },
+    offers: { "@type": "Offer", price: String(price), priceCurrency: "INR", availability: "https://schema.org/InStock", url },
+    ...(r.ratingCount > 0 ? { aggregateRating: { "@type": "AggregateRating", ratingValue: Number(r.rating || 0).toFixed(1), reviewCount: String(r.ratingCount) } } : {}),
+  };
+  html = html.replace("</head>", `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>\n</head>`);
+  return html;
+}
+
 function baseTemplate() {
   return fs.readFileSync(path.join(DIST_DIR, "index.html"), "utf8");
 }
@@ -271,6 +333,17 @@ app.use(async (req, res, next) => {
     return res.send(html);
   }
 
+  const resMatch = req.path.match(/^\/resources\/([^/]+)(?:\/.*)?$/);
+  if (resMatch) {
+    const all = await getAllResources();
+    const r = all.find((x) => x.id === resMatch[1]);
+    if (!r) return next();
+    const html = renderResourcePageHtml(baseTemplate(), r, origin, all);
+    renderCache.set(cacheKey, { html, at: Date.now() });
+    res.set("Content-Type", "text/html");
+    return res.send(html);
+  }
+
   const match = req.path.match(/^\/tests\/([^/]+)(?:\/.*)?$/);
   if (!match) return next(); // non-test routes: static index.html already has decent generic meta tags
 
@@ -295,7 +368,7 @@ app.use(express.static(DIST_DIR, { extensions: [] }));
 // /.docker/secrets.json or /wp-admin) gets a real 404 instead of silently
 // pretending to be a valid page. A 200 on junk paths is a "soft 404" signal
 // that can hurt how much Google trusts the rest of the site's status codes.
-const KNOWN_APP_PATH = /^\/(tests\/[^/]+(\/.*)?|privacy|terms)?$/;
+const KNOWN_APP_PATH = /^\/((tests|resources)\/[^/]+(\/.*)?|privacy|terms)?$/;
 app.use((req, res) => {
   const indexHtml = path.join(DIST_DIR, "index.html");
   if (KNOWN_APP_PATH.test(req.path)) {
