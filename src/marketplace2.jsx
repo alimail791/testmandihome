@@ -14,6 +14,8 @@ import {
 // Cart access for any card or page: { has(item), add(item), open() }.
 // Provided by AppShell.
 export const CartContext = createContext(null);
+// Catalogue helpers for cards: { bundlesFor(testId), openBundle(bundle) }.
+export const CatalogContext = createContext(null);
 
 /* ---------------------------------------------------------------------- */
 /* Helpers                                                                */
@@ -64,29 +66,67 @@ export function itemHighlights(item) {
 /* ---------------------------------------------------------------------- */
 /* Small pieces                                                           */
 /* ---------------------------------------------------------------------- */
-export function ItemCover({ item, variant = "card" }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  if (item.kind === "resource" && item.hasCover && !imgFailed) {
-    return (
-      <img
-        className={`tpt-cover tpt-cover-img tpt-cover-${variant}`}
-        src={api.resourceImageUrl(item.id, "cover")}
-        alt=""
-        loading="lazy"
-        onError={() => setImgFailed(true)}
-      />
-    );
-  }
+// The exam/subject name repeated at the start of a title adds nothing on a
+// cover that already shows it in the header band.
+function coverTitle(item) {
+  const head = item.kind === "resource" ? item.subject : item.category;
+  let t = item.title || "";
+  if (head && t.toLowerCase().startsWith(head.toLowerCase())) t = t.slice(head.length).replace(/^[\s—–:|-]+/, "");
+  return t || item.title;
+}
+
+// Auto-designed product cover, shaped like a printed test paper (for tests)
+// or a worksheet (for resources without an uploaded cover). Sizes are in
+// container units, so the same design works as a card thumbnail, the big
+// product-page image and a tiny cart thumbnail.
+function PaperCover({ item, variant }) {
   const isRes = item.kind === "resource";
-  const big = isRes ? (item.subject || item.resourceType) : item.category;
-  const small = isRes ? item.grade : `${item.questionCount ?? item.questions?.length ?? 0} questions`;
+  const head = isRes ? (item.subject || item.resourceType) : item.category;
+  const color = colorFor(head || item.title);
+  const qs = item.questionCount ?? item.questions?.length ?? 0;
   return (
-    <div className={`tpt-cover tpt-cover-gen tpt-cover-${variant}`} style={{ backgroundColor: colorFor(big || item.title) }} aria-hidden="true">
-      <span className="tpt-cover-tag">{isRes ? item.resourceType : "MCQ test"}</span>
-      <span className="tpt-cover-big">{big || "TestMandi"}</span>
-      <span className="tpt-cover-small">{small}</span>
+    <div className={`tpt-cover tpt-paper tpt-paper-${variant}`} style={{ "--paper-c": color }} aria-hidden="true">
+      <div className="tp-band">
+        <span className="tp-head">{head || "TestMandi"}</span>
+        <span className="tp-kind">{isRes ? item.resourceType : "Practice test"}</span>
+      </div>
+      <div className="tp-body">
+        <div className="tp-title">{coverTitle(item)}</div>
+        {isRes ? (
+          <div className="tp-lines">{[88, 72, 94, 60, 80].map((w, i) => <span key={i} style={{ width: `${w}%` }} />)}</div>
+        ) : (
+          <div className="tp-qs">
+            {[0, 1].map((qi) => (
+              <div key={qi} className="tp-q">
+                <span className="tp-qn">Q{qi + 1}.</span>
+                <span className="tp-qline" style={{ width: qi ? "70%" : "84%" }} />
+                <span className="tp-opts">
+                  {["A", "B", "C", "D"].map((o, oi) => <span key={o} className={qi === 0 && oi === 2 ? "on" : ""}>{o}</span>)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="tp-foot">
+        {isRes
+          ? <><span>{item.grade}</span>{item.pages ? <span>{item.pages} pages</span> : null}</>
+          : <><span>{qs} Qs</span>{item.duration ? <span>{item.duration} min</span> : null}<span className="tp-report">Instant report</span></>}
+      </div>
     </div>
   );
+}
+
+export function ItemCover({ item, variant = "card" }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const imgSrc = item.hasCover && !imgFailed
+    ? (item.kind === "resource" ? api.resourceImageUrl(item.id, "cover") : api.testCoverUrl(item.id, item.coverVersion))
+    : null;
+  const inner = imgSrc
+    ? <img className={`tpt-cover tpt-cover-img tpt-cover-${variant === "main" ? "mainimg" : variant}`} src={imgSrc} alt="" loading="lazy" onError={() => setImgFailed(true)} />
+    : <PaperCover item={item} variant={variant} />;
+  // The big product-page image shows the cover as a sheet on a tinted backdrop.
+  return variant === "main" ? <div className="tpt-cover-stage">{inner}</div> : inner;
 }
 
 function RatingLine({ item, onClick, compact }) {
@@ -129,6 +169,11 @@ function BookmarkButton({ active, onClick, size = 34, label }) {
 /* ---------------------------------------------------------------------- */
 export function ProductCard({ item, owned, wishlisted, onToggleWishlist, onOpen, onBuy, onOwnedAction }) {
   const cart = useContext(CartContext);
+  const catalog = useContext(CatalogContext);
+  const alsoIn = item.kind === "test" ? catalog?.bundlesFor?.(item.id)?.[0] : null;
+  const tags = item.kind === "resource" ? (item.tags || []) : (item.topics || []);
+  const topRated = item.ratingCount >= 20 && item.rating >= 4.5;
+  const isNew = item.createdAt && Date.now() - item.createdAt < 14 * 864e5 && !item.ratingCount;
   const href = itemPath(item);
   const free = Number(item.price) === 0;
   const inCart = !!cart?.has(item);
@@ -139,10 +184,17 @@ export function ProductCard({ item, owned, wishlisted, onToggleWishlist, onOpen,
         <ItemCover item={item} />
       </a>
       <div className="tpt-card-body">
+        {topRated ? <span className="tpt-ribbon">Top rated</span> : isNew ? <span className="tpt-ribbon tpt-ribbon-new">New</span> : null}
         <a className="tpt-card-title" href={href} onClick={open}>{item.title}</a>
         <div className="tpt-card-seller"><SellerAvatar name={item.sellerName} size={20} /><span className="tpt-ellipsis">{item.sellerName}</span></div>
         <RatingLine item={item} compact />
         <div className="tpt-card-hl">{itemHighlights(item)}</div>
+        {tags.length > 0 && (
+          <div className="tpt-card-tags">{tags.slice(0, 3).join(", ")}{tags.length > 3 ? <span> +{tags.length - 3}</span> : null}</div>
+        )}
+        {alsoIn && (
+          <div className="tpt-card-also">Also in: <a className="tpt-link" href={`/tests/${alsoIn.id}/${slugify(alsoIn.title)}`} onClick={(e) => { e.preventDefault(); catalog.openBundle?.(alsoIn); }}>{alsoIn.title}</a></div>
+        )}
       </div>
       <div className="tpt-card-foot">
         <span className={`tpt-price ${Number(item.price) === 0 ? "tpt-free" : ""}`}>{priceLabel(item.price)}</span>
@@ -850,6 +902,41 @@ export function ResourceTaxonomyManager() {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Seller: cover image for one of their tests                             */
+/* ---------------------------------------------------------------------- */
+export function TestCoverButton({ test, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const pick = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 3 * 1024 * 1024) { window.alert("The cover image must be under 3 MB."); return; }
+    const fd = new FormData();
+    fd.append("cover", f);
+    setBusy(true);
+    try { const r = await api.uploadTestCover(test.id, fd); onChanged({ hasCover: true, coverVersion: r.coverVersion }); }
+    catch (err) { window.alert(err.message || "Couldn't upload the cover."); }
+    finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm("Remove this cover and use the automatic design?")) return;
+    setBusy(true);
+    try { await api.removeTestCover(test.id); onChanged({ hasCover: false }); }
+    catch (err) { window.alert(err.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+      <label className="icon-btn" title={test.hasCover ? "Change cover image" : "Add a cover image"} style={{ cursor: "pointer", position: "relative" }}>
+        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={pick} disabled={busy} style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} aria-label="Upload cover image" />
+        {busy ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
+      </label>
+      {test.hasCover && !busy && <button type="button" className="icon-btn" title="Remove cover image" onClick={remove}><X size={14} /></button>}
+    </span>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Seller: upload a resource                                              */
 /* ---------------------------------------------------------------------- */
 const MAX_FILE_MB = 50;
@@ -1199,20 +1286,44 @@ export const TPT_CSS = `
 
   .tpt-cover { display: block; border-radius: 4px; box-shadow: 0 3px 10px rgba(27,42,74,0.22); }
   .tpt-cover-card { width: 64%; aspect-ratio: 3 / 4; }
-  .tpt-cover-main { width: 100%; aspect-ratio: 4 / 3; border-radius: 0; box-shadow: none; }
   .tpt-cover-thumb { width: 100%; aspect-ratio: 1; border-radius: 4px; box-shadow: none; }
   .tpt-cover-img { object-fit: cover; background: #fff; }
-  .tpt-cover-main.tpt-cover-img { object-fit: contain; background: ${T.paperAlt}; }
-  .tpt-cover-gen { color: #fff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
-    background-image: repeating-linear-gradient(180deg, transparent 0 17px, rgba(255,255,255,0.13) 17px 18px); }
-  .tpt-cover-tag { align-self: flex-start; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0,0,0,0.25); border-radius: 4px; padding: 2px 7px; }
-  .tpt-cover-big { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1.1; overflow-wrap: anywhere; }
-  .tpt-cover-small { font-size: 11.5px; opacity: 0.9; }
-  .tpt-cover-main.tpt-cover-gen { padding: 28px; }
-  .tpt-cover-main .tpt-cover-big { font-size: clamp(28px, 4vw, 46px); }
-  .tpt-cover-thumb.tpt-cover-gen { padding: 5px; }
-  .tpt-cover-thumb .tpt-cover-tag, .tpt-cover-thumb .tpt-cover-small { display: none; }
-  .tpt-cover-thumb .tpt-cover-big { font-size: 10px; }
+  .tpt-card-thumb { position: relative; }
+  .tpt-ribbon { justify-self: start; background: ${T.saffron}; color: ${T.ink}; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .tpt-ribbon-new { background: ${T.green}; color: #fff; }
+  .tpt-card-tags { font-size: 12px; color: ${T.muted}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tpt-card-also { font-size: 12px; color: ${T.muted}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tpt-card-also .tpt-link { font-size: 12px; text-decoration: none; }
+  .tpt-card-also .tpt-link:hover { text-decoration: underline; }
+
+  /* Auto-designed "paper" cover */
+  .tpt-paper { container-type: inline-size; background: #fff; display: flex; flex-direction: column; overflow: hidden; color: ${T.ink}; border: 1px solid rgba(27,42,74,0.08); }
+  .tpt-paper .tp-band { background: var(--paper-c); color: #fff; padding: 6cqw 7cqw 5cqw; display: grid; gap: 1.5cqw; }
+  .tpt-paper .tp-head { font-family: var(--font-display); font-weight: 700; font-size: 11cqw; line-height: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tpt-paper .tp-kind { font-family: var(--font-mono); font-size: 4.6cqw; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.9; }
+  .tpt-paper .tp-body { flex: 1; padding: 6cqw 7cqw 0; display: flex; flex-direction: column; gap: 6cqw; min-height: 0; }
+  .tpt-paper .tp-title { font-family: var(--font-display); font-weight: 700; font-size: 8.6cqw; line-height: 1.12; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .tpt-paper .tp-qs { display: grid; gap: 5cqw; }
+  .tpt-paper .tp-q { display: grid; grid-template-columns: auto 1fr; gap: 2.5cqw 3cqw; align-items: center; }
+  .tpt-paper .tp-qn { font-family: var(--font-mono); font-size: 4.6cqw; color: ${T.muted}; }
+  .tpt-paper .tp-qline { height: 2.2cqw; border-radius: 2cqw; background: #E3E6EE; }
+  .tpt-paper .tp-opts { grid-column: 2; display: flex; gap: 3cqw; }
+  .tpt-paper .tp-opts span { width: 7cqw; height: 7cqw; border-radius: 50%; border: 0.7cqw solid #C9CEDB; display: grid; place-items: center; font-size: 3.6cqw; font-family: var(--font-mono); color: #8A91A6; }
+  .tpt-paper .tp-opts span.on { background: ${T.green}; border-color: ${T.green}; color: #fff; }
+  .tpt-paper .tp-lines { display: grid; gap: 4cqw; }
+  .tpt-paper .tp-lines span { height: 2.2cqw; border-radius: 2cqw; background: #E3E6EE; }
+  .tpt-paper .tp-foot { display: flex; flex-wrap: wrap; gap: 2cqw; padding: 5cqw 7cqw 6cqw; font-size: 4.6cqw; font-family: var(--font-mono); color: ${T.inkSoft}; }
+  .tpt-paper .tp-foot span { background: ${T.paperAlt}; border-radius: 1.5cqw; padding: 1cqw 2.4cqw; white-space: nowrap; }
+  .tpt-paper .tp-foot .tp-report { background: color-mix(in srgb, ${T.green} 14%, #fff); color: ${T.green}; }
+  .tpt-paper-card { width: 64%; aspect-ratio: 3 / 4; border-radius: 4px; }
+  .tpt-paper-thumb { width: 100%; aspect-ratio: 1; border-radius: 4px; box-shadow: none; }
+  .tpt-paper-thumb .tp-kind, .tpt-paper-thumb .tp-body, .tpt-paper-thumb .tp-foot { display: none; }
+  .tpt-paper-thumb .tp-band { flex: 1; align-content: center; padding: 8cqw; }
+  .tpt-paper-thumb .tp-head { font-size: 17cqw; white-space: normal; }
+  .tpt-cover-stage { width: 100%; aspect-ratio: 4 / 3; display: grid; place-items: center; padding: 5% 0; background: ${T.paperAlt};
+    background-image: radial-gradient(circle at 20% 15%, rgba(255,255,255,0.7), transparent 55%); }
+  .tpt-paper-main { height: 100%; aspect-ratio: 3 / 4; border-radius: 4px; box-shadow: 0 10px 30px rgba(27,42,74,0.22); }
+  .tpt-cover-mainimg { height: 100%; max-width: 92%; object-fit: contain; border-radius: 4px; box-shadow: 0 10px 30px rgba(27,42,74,0.22); background: #fff; }
 
   .tpt-rating { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; white-space: nowrap; color: ${T.ink}; }
   .tpt-rating-new { font-family: var(--font-mono); font-size: 11px; color: ${T.green}; text-transform: uppercase; letter-spacing: 0.05em; }

@@ -222,6 +222,9 @@ export const api = {
   deleteResource: (id) => request(`/api/resources/${id}`, { method: "DELETE" }),
   getResourceDownload: (id) => request(`/api/resources/${id}/download`),
   getMyResourcePurchases: () => request("/api/resource-purchases/mine"),
+  testCoverUrl: (id, v) => `${API_BASE}/api/tests/${id}/cover${v ? `?v=${v}` : ""}`,
+  uploadTestCover: (id, formData) => uploadWithProgress(`/api/tests/${id}/cover`, formData),
+  removeTestCover: (id) => request(`/api/tests/${id}/cover`, { method: "DELETE" }),
   resourceImageUrl: (id, slot) => `${API_BASE}/api/resources/${id}/image/${slot}`,
   // Multipart upload with progress (XHR, since fetch can't report upload
   // progress). Retries once after refreshing an expired access token.
