@@ -7,6 +7,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { renderBlogIndex, renderBlogPost, renderBlogSitemap } from "./blog/render.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, "dist");
@@ -306,6 +307,66 @@ function buildHomeJsonLd(origin) {
 }
 
 const app = express();
+
+/* ---------------------------------------------------------------------- */
+/* Blog — /blog, /blog/:slug, /blog-sitemap.xml and the /admin/blog editor. */
+/* Rendered here for every visitor (not just crawlers) so each article is   */
+/* plain HTML on first load. Posts come from the API; see blog/render.js.   */
+/* ---------------------------------------------------------------------- */
+const BLOG_TTL_MS = 60 * 1000;
+let blogListCache = { data: null, at: 0 };
+async function getBlogPosts() {
+  if (blogListCache.data && Date.now() - blogListCache.at < BLOG_TTL_MS) return blogListCache.data;
+  try {
+    const r = await fetch(`${API_BASE}/api/blog`);
+    if (!r.ok) throw new Error(`API responded ${r.status}`);
+    blogListCache = { data: (await r.json()).posts || [], at: Date.now() };
+  } catch (err) {
+    console.error("frontend-server: failed to fetch blog posts:", err.message);
+    if (!blogListCache.data) return [];
+  }
+  return blogListCache.data;
+}
+const blogPostCache = new Map();
+async function getBlogPost(slug) {
+  const hit = blogPostCache.get(slug);
+  if (hit && Date.now() - hit.at < BLOG_TTL_MS) return hit.post;
+  const r = await fetch(`${API_BASE}/api/blog/${encodeURIComponent(slug)}`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`API responded ${r.status}`);
+  const post = (await r.json()).post;
+  blogPostCache.set(slug, { post, at: Date.now() });
+  return post;
+}
+
+app.get("/blog", async (req, res) => {
+  res.set("Cache-Control", "public, max-age=60");
+  res.type("html").send(renderBlogIndex(await getBlogPosts(), SITE_ORIGIN));
+});
+
+app.get("/blog/:slug", async (req, res, next) => {
+  try {
+    const post = await getBlogPost(req.params.slug);
+    if (!post) return next(); // falls through to the 404 handler below
+    const related = (await getBlogPosts()).filter((p) => p.slug !== post.slug).slice(0, 3);
+    res.set("Cache-Control", "public, max-age=60");
+    res.type("html").send(renderBlogPost(post, related, SITE_ORIGIN));
+  } catch (err) {
+    console.error("frontend-server: blog post render failed:", err.message);
+    res.status(503).type("text").send("The blog is temporarily unavailable. Please try again in a minute.");
+  }
+});
+
+app.get("/blog-sitemap.xml", async (req, res) => {
+  res.type("application/xml").send(renderBlogSitemap(await getBlogPosts(), SITE_ORIGIN));
+});
+
+const BLOG_ADMIN_HTML = fs.readFileSync(path.join(__dirname, "blog", "admin.html"), "utf8").replace("__API_BASE__", API_BASE);
+app.get("/admin/blog", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.type("html").send(BLOG_ADMIN_HTML);
+});
+
 
 app.use(async (req, res, next) => {
   const ua = req.headers["user-agent"] || "";

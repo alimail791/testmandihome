@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://testmandi.in/sitemap.xml
+Sitemap: https://testmandi.in/blog-sitemap.xml
