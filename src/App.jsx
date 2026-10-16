@@ -621,6 +621,13 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
             </div>
           )}
 
+          {!isAdmin && mode === "register" && accType === "advertiser" && (
+            <div className="referral-promo">
+              <Gift size={15} color={T.saffronDeep} style={{ flexShrink: 0 }} />
+              <span>Advertiser referral program: refer another business and get your <strong>next ad free</strong> once they post their first ad.</span>
+            </div>
+          )}
+
           <div style={{ display: "grid", gap: 12, marginTop: isAdmin ? 0 : 16 }}>
             {mode === "register" && (
               <label className="field-label">{accType === "seller" || accType === "advertiser" ? "Contact person name" : "Full name"}
@@ -643,9 +650,9 @@ function AuthModal({ initialMode = "login", initialRole = "buyer", onClose, onRe
             <label className="field-label">Password
               <input className="field-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </label>
-            {mode === "register" && (accType === "buyer" || accType === "seller") && (
+            {mode === "register" && (accType === "buyer" || accType === "seller" || accType === "advertiser") && (
               <label className="field-label">Referral code (optional)
-                <input className="field-input" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder={accType === "seller" ? "Referred by another seller? Enter their code" : "Got a code from a friend? Enter it here"} />
+                <input className="field-input" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder={accType === "seller" ? "Referred by another seller? Enter their code" : accType === "advertiser" ? "Referred by another advertiser? Enter their code" : "Got a code from a friend? Enter it here"} />
               </label>
             )}
           </div>
@@ -902,7 +909,7 @@ function CheckoutModal({ kind, itemId, adDraft, displayTitle, displayPrice, sell
           {(phase === "form" || phase === "error") && (
             <>
               <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={pay}>
-                {Number(displayPrice) === 0 ? <><Download size={14} /> Get it free</> : <><Lock size={14} /> Pay ₹{shownPrice} via Razorpay</>}
+                {Number(displayPrice) === 0 ? <>{kind === "ad" ? <><Megaphone size={14} /> Publish free ad</> : <><Download size={14} /> Get it free</>}</> : <><Lock size={14} /> Pay ₹{shownPrice} via Razorpay</>}
               </button>
               {Number(displayPrice) > 0 && (
                 <div style={{ fontSize: 11.5, color: T.muted, marginTop: 10, textAlign: "center" }}>
@@ -2338,7 +2345,8 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
 const AD_COST_HOMEPAGE = 500;
 const AD_COST_CATEGORY = 200;
 
-function AdWizard({ categories, onClose, onSubmit }) {
+function AdWizard({ categories, onClose, onSubmit, freeAdCredits = 0, freeAdDays = 7 }) {
+  const [useFreeAd, setUseFreeAd] = useState(freeAdCredits > 0);
   const [headline, setHeadline] = useState("");
   const [body, setBody] = useState("");
   const [placement, setPlacement] = useState("homepage");
@@ -2346,7 +2354,9 @@ function AdWizard({ categories, onClose, onSubmit }) {
   const [error, setError] = useState("");
 
   const costPerDay = placement === "homepage" ? AD_COST_HOMEPAGE : AD_COST_CATEGORY;
-  const totalCost = costPerDay * Math.max(1, Number(days) || 0);
+  const fullCost = costPerDay * Math.max(1, Number(days) || 0);
+  const freeApplied = useFreeAd && freeAdCredits > 0;
+  const totalCost = freeApplied ? costPerDay * Math.max(0, (Number(days) || 0) - freeAdDays) : fullCost;
 
   const submit = () => {
     if (!headline.trim() || !body.trim()) { setError("Headline and ad text are required."); return; }
@@ -2354,7 +2364,7 @@ function AdWizard({ categories, onClose, onSubmit }) {
     if (body.length > 140) { setError("Keep the ad text under 140 characters."); return; }
     if (!days || days < 1) { setError("Ads run for at least 1 day."); return; }
     setError("");
-    onSubmit({ headline: headline.trim(), body: body.trim(), placement, days: Number(days), cost: totalCost });
+    onSubmit({ headline: headline.trim(), body: body.trim(), placement, days: Number(days), cost: totalCost, ...(freeApplied ? { useFreeAd: true } : {}) });
   };
 
   return (
@@ -2383,13 +2393,21 @@ function AdWizard({ categories, onClose, onSubmit }) {
             </label>
           </div>
 
+          {freeAdCredits > 0 && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 14, fontSize: 13, color: T.ink, cursor: "pointer" }}>
+              <input type="checkbox" checked={useFreeAd} onChange={(e) => setUseFreeAd(e.target.checked)} style={{ marginTop: 2 }} />
+              <span><Gift size={13} color={T.saffronDeep} /> <strong>Use my free ad</strong> — up to {freeAdDays} days free (you have {freeAdCredits}). Longer ads pay only for the extra days.</span>
+            </label>
+          )}
+
           <div className="split-note" style={{ marginTop: 14 }}>
+            {freeApplied && <><span style={{ textDecoration: "line-through", color: T.muted }}>₹{fullCost}</span>{" "}</>}
             Total cost: <strong>₹{totalCost}</strong> for {days} day{days > 1 ? "s" : ""} ({placement === "homepage" ? "homepage" : `${placement} category page`}, text-only).
           </div>
           {error && <div style={{ color: T.red, fontSize: 12.5, marginTop: 10 }}>{error}</div>}
 
           <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit}>
-            <Megaphone size={15} /> Pay & publish ad
+            <Megaphone size={15} /> {totalCost > 0 ? "Pay & publish ad" : "Publish free ad"}
           </button>
         </div>
       </div>
@@ -2399,6 +2417,13 @@ function AdWizard({ categories, onClose, onSubmit }) {
 
 function AdsStudio({ session, categories, ads, onRequireLogin, onStartAdCheckout }) {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [refer, setRefer] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const isAdvertiser = session?.role === "advertiser";
+  useEffect(() => {
+    if (!isAdvertiser) return;
+    api.getMyReferrals().then(setRefer).catch(() => {});
+  }, [isAdvertiser, ads.length]);
 
   if (!session || session.role !== "advertiser") {
     return (
@@ -2447,6 +2472,32 @@ function AdsStudio({ session, categories, ads, onRequireLogin, onStartAdCheckout
         <div className="stub"><div className="stub-label">Total spend</div><div className="stub-value">₹{totalSpend.toLocaleString("en-IN")}</div></div>
       </div>
 
+      {refer?.referralCode && (
+        <div className="ledger-row" style={{ marginBottom: 22, alignItems: "center" }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", fontFamily: "var(--font-display)", fontSize: 17, color: T.ink }}>
+              <Gift size={18} color={T.saffronDeep} /> Refer & earn a free ad
+            </div>
+            <div style={{ fontSize: 13, color: T.inkSoft, marginTop: 4, lineHeight: 1.5 }}>
+              Share your code with another business. When they register as an advertiser and post their first ad, your next ad is free (up to {refer.freeAdDays} days, any placement).
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+              <span className="referral-code-box">{refer.referralCode}</span>
+              <button className="btn-primary" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Advertise to thousands of students on TestMandi! Register as an Advertiser with my code ${refer.referralCode}: ${window.location.origin}/?ref=${refer.referralCode}`)}`, "_blank")}>
+                <MessageCircle size={14} /> Share on WhatsApp
+              </button>
+              <button className="btn-outline" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/?ref=${refer.referralCode}`); } catch (e) { /* clipboard unavailable */ } setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
+                {copied ? <><Check size={14} color={T.green} /> Copied!</> : <><Copy size={14} /> Copy invite link</>}
+              </button>
+            </div>
+          </div>
+          <div className="ledger-figures">
+            <div><div className="fig-label">Referred</div><div className="fig-value">{refer.referredCount}</div></div>
+            <div><div className="fig-label">Free ads</div><div className="fig-value" style={{ color: refer.freeAdCredits ? T.green : undefined }}>{refer.freeAdCredits}</div></div>
+          </div>
+        </div>
+      )}
+
       {myAds.length === 0 && (
         <div className="empty-panel">
           <Megaphone size={22} color={T.saffronDeep} />
@@ -2485,6 +2536,8 @@ function AdsStudio({ session, categories, ads, onRequireLogin, onStartAdCheckout
       {wizardOpen && (
         <AdWizard
           categories={categories}
+          freeAdCredits={refer?.freeAdCredits || 0}
+          freeAdDays={refer?.freeAdDays || 7}
           onClose={() => setWizardOpen(false)}
           onSubmit={(draft) => { onStartAdCheckout(draft); setWizardOpen(false); }}
         />
@@ -5404,11 +5457,11 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
           onRegister={registerUser}
           onLogin={loginUser}
           loginError={loginError}
-          defaultReferralCode={authModal.role === "buyer" ? urlReferralCode : ""}
+          defaultReferralCode={urlReferralCode}
         />
       )}
 
-      {session && (session.role === "buyer" || session.role === "seller") && session.emailVerified !== false && (
+      {session && (session.role === "buyer" || session.role === "seller" || session.role === "advertiser") && session.emailVerified !== false && (
         <ReferEarnPopup key={session.email} session={session} />
       )}
 
@@ -5440,6 +5493,7 @@ function ReferEarnPopup({ session }) {
   const [data, setData] = useState(null);
   const [copied, setCopied] = useState(false);
   const isSeller = session.role === "seller";
+  const isAdvertiser = session.role === "advertiser";
   const storageKey = `tm_refer_popup_${session.email}`;
 
   useEffect(() => {
@@ -5464,7 +5518,9 @@ function ReferEarnPopup({ session }) {
   const code = data.referralCode || session.referralCode;
   if (!code) return null;
   const shareUrl = `${window.location.origin}/?ref=${code}`;
-  const shareText = isSeller
+  const shareText = isAdvertiser
+    ? `Advertise to thousands of students on TestMandi! Register as an Advertiser with my code ${code}: ${shareUrl}`
+    : isSeller
     ? `Sell your MCQ tests on TestMandi! Use my code ${code} when you register as a seller, or refer a student to buy their first test: ${shareUrl}`
     : `Join me on TestMandi and try MCQ tests for competitive exams! Use my code ${code} when you sign up: ${shareUrl}`;
   const copyLink = async () => {
@@ -5483,7 +5539,9 @@ function ReferEarnPopup({ session }) {
           </div>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 21, color: T.ink, marginBottom: 6 }}>Refer & earn on TestMandi</div>
           <div style={{ fontSize: 13.5, color: T.inkSoft, lineHeight: 1.5, marginBottom: 14 }}>
-            {isSeller
+            {isAdvertiser
+              ? `Refer another business to advertise on TestMandi — when they post their first ad, your next ad is free (up to ${data.freeAdDays || 7} days).${data.freeAdCredits ? ` You have ${data.freeAdCredits} free ad${data.freeAdCredits > 1 ? "s" : ""} waiting!` : ""}`
+              : isSeller
               ? "Refer another seller or a student — earn ₹200 straight to your payout balance when they publish their first test or make their first purchase."
               : "Share your code — when a friend buys their first test, you get 50% off your next one. More friends, more discounts!"}
           </div>
