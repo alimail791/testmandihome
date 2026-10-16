@@ -4363,7 +4363,7 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
   const [ads, setAds] = useState([]);
   const [marketplaceAds, setMarketplaceAds] = useState([]);
   const [pendingAd, setPendingAd] = useState(null);
-  const [sellerShare, setSellerShare] = useState(70);
+  const [sellerShare, setSellerShare] = useState(80);
   const [sellerShareError, setSellerShareError] = useState("");
 
   const commitSellerShare = async (pct) => {
