@@ -4306,6 +4306,12 @@ function SiteFooter({ onNavigate }) {
       >
         <Mail size={16} /> {TESTMANDI_PARTNERSHIPS_EMAIL}
       </a>
+      <a
+        href="/blog"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#1c2b4a", textDecoration: "none", fontWeight: 600 }}
+      >
+        <FileText size={16} /> Blog
+      </a>
       <button
         onClick={() => onNavigate?.("privacy")}
         style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#1c2b4a", background: "none", border: "none", cursor: "pointer", font: "inherit", fontWeight: 600, padding: 0 }}
