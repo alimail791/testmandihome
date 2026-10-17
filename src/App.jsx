@@ -4268,8 +4268,69 @@ function WhatsAppFloatButton() {
   );
 }
 
+// Cross-promotion of the other Raise Academy products, shown above the
+// footer on every page. utm_source lets each site see visits from TestMandi.
+const SISTER_SITES = [
+  {
+    name: "YNeet", url: "https://yneet.in/?utm_source=testmandi&utm_medium=referral", domain: "yneet.in",
+    who: "For NEET students", Icon: GraduationCap,
+    pitch: "Complete NEET preparation from Class 6 to droppers: mock tests, chapter tests, previous-year questions and WhatsApp doubt support.",
+    offer: "Try 5 days for ₹99", cta: "Start NEET prep",
+  },
+  {
+    name: "ClassCoach", url: "https://classcoach.in/?utm_source=testmandi&utm_medium=referral", domain: "classcoach.in",
+    who: "For tutors & teachers", Icon: Users,
+    pitch: "Your AI teaching assistant: grade descriptive answers, create class slides, and share notes and question banks with your students.",
+    offer: "1 month free trial", cta: "Try ClassCoach free",
+  },
+  {
+    name: "VasulBook", url: "https://vasulbook.com/?utm_source=testmandi&utm_medium=referral", domain: "vasulbook.com",
+    who: "For any business", Icon: Wallet,
+    pitch: "A simple credit ledger for shops and businesses: record who owes you, send payment reminders and collect your dues faster.",
+    offer: "3 months free", cta: "Try VasulBook free",
+  },
+];
+
+function SisterSites() {
+  return (
+    <section aria-labelledby="sister-sites-title" style={{ marginTop: 40, padding: "32px 20px 8px", borderTop: `1px solid ${T.line}` }}>
+      <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", color: T.saffronDeep, fontWeight: 700 }}>More from Raise Academy</div>
+          <h2 id="sister-sites-title" style={{ fontFamily: "var(--font-display)", fontSize: 24, color: T.ink, margin: "6px 0 4px", fontWeight: 400 }}>One family of tools for students, teachers and businesses</h2>
+          <div style={{ fontSize: 13.5, color: T.inkSoft }}>Built by the same team behind TestMandi.</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 16 }}>
+          {SISTER_SITES.map(({ name, url, domain, who, Icon, pitch, offer, cta }) => (
+            <a key={name} href={url} target="_blank" rel="noopener" className="sister-card"
+              style={{ display: "flex", flexDirection: "column", gap: 10, padding: 20, background: "#fff", border: `1px solid ${T.line}`, borderRadius: 12, textDecoration: "none", color: T.ink }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 40, height: 40, borderRadius: 20, background: "rgba(232,163,61,0.16)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon size={20} color={T.saffronDeep} />
+                </span>
+                <div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 19, lineHeight: 1.1 }}>{name}</div>
+                  <div style={{ fontSize: 12, color: T.inkSoft }}>{who}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 13.5, color: T.inkSoft, lineHeight: 1.5, flex: 1 }}>{pitch}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.green, background: "rgba(47,122,79,0.1)", padding: "4px 10px", borderRadius: 999 }}>{offer}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: T.saffronDeep }}>{cta} →</span>
+              </div>
+              <div style={{ fontSize: 12, color: T.muted }}>{domain}</div>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SiteFooter({ onNavigate }) {
   return (
+    <>
+    <SisterSites />
     <footer
       style={{
         marginTop: 40,
@@ -4328,6 +4389,7 @@ function SiteFooter({ onNavigate }) {
         © {new Date().getFullYear()} TestMandi. All rights reserved.
       </span>
     </footer>
+    </>
   );
 }
 

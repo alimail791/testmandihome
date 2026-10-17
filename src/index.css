@@ -1,0 +1,5 @@
+
+/* "More from Raise Academy" cards above the footer */
+.sister-card { transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; }
+.sister-card:hover, .sister-card:focus-visible { border-color: #C97F1B !important; box-shadow: 0 6px 18px rgba(27,42,74,0.10); transform: translateY(-2px); }
+.sister-card:focus-visible { outline: 2px solid #C97F1B; outline-offset: 2px; }
