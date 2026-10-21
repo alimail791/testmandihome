@@ -1223,7 +1223,7 @@ function PassesSection({ passes, myGrants, onBuyPass }) {
   );
 }
 
-function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId, scheduledTests, onJoinLive, onViewLeaderboard, allAccessPasses, myAccessGrants, onBuyPass, wishlistIds, onToggleWishlist, resources, resourceOptions, ownedResourceIds, onOpenItem, onBuyResource, onDownloadResource, onSellResources, tab, onTabChange }) {
+function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, onBuy, onBuyBundle, goLearning, sellerShare, categories, sharedItemId, scheduledTests, onJoinLive, onViewLeaderboard, allAccessPasses, myAccessGrants, onBuyPass, wishlistIds, onToggleWishlist, resources, resourceOptions, ownedResourceIds, onOpenItem, onBuyResource, onDownloadResource, onSellResources, tab, onTabChange, session, onJoin }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState("rating");
@@ -1273,17 +1273,51 @@ function Marketplace({ tests, bundles, ads, purchasedIds, purchasedBundleIds, on
   return (
     <div>
       <div className="hero-band">
-        <div style={{ maxWidth: 620 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.16em", color: T.saffron, textTransform: "uppercase", marginBottom: 10 }}>
-            The test bazaar
+        <div className="hero-grid">
+          <div style={{ maxWidth: 600 }}>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.16em", color: T.saffron, textTransform: "uppercase", marginBottom: 10 }}>
+              India's mock-test marketplace
+            </div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(28px, 6vw, 44px)", color: T.paper, lineHeight: 1.12, margin: "0 0 14px" }}>
+              Practise like it's exam day.<br />Know exactly where to improve.
+            </h1>
+            <p style={{ color: "#DCD2B8", fontSize: 16, lineHeight: 1.6, margin: "0 0 20px" }}>
+              Mock tests for NEET, JEE and {Math.max(30, (categories || []).length)}+ competitive exams from experienced teachers.
+              Take them in the real exam pattern and get an instant score report with your rank,
+              topic-wise analysis and an explanation for every question. Teachers and institutes
+              sell their tests and study material here and keep {sellerShare}% of every sale.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {!session ? (
+                <>
+                  <button className="btn-primary hero-cta hero-cta-main" onClick={() => onJoin?.("buyer")}><GraduationCap size={16} /> Start practising — sign up free</button>
+                  <button className="btn-outline hero-cta hero-cta-ghost" onClick={() => onJoin?.("seller")}><Store size={16} /> Sell your tests</button>
+                </>
+              ) : (
+                <button className="btn-primary hero-cta hero-cta-main" onClick={() => { try { gridTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { /* ignore */ } }}><Search size={16} /> Browse tests</button>
+              )}
+            </div>
+            <div className="hero-stats">
+              <div><strong>{tests.filter((t) => !isBlockedTest(t)).length}+</strong><span>mock tests</span></div>
+              <div><strong>{(() => { const p = tests.map((t) => Number(t.price)).filter((n) => n > 0); return p.length ? `₹${Math.min(...p)}` : "Free"; })()}</strong><span>tests start at</span></div>
+              <div><strong>{Math.max(30, (categories || []).length)}+</strong><span>exams</span></div>
+              <div><strong>{sellerShare}%</strong><span>to teachers</span></div>
+            </div>
           </div>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(26px, 6vw, 40px)", color: T.paper, lineHeight: 1.15, margin: "0 0 12px" }}>
-            Every exam has a seller.<br />Every candidate gets a report.
-          </h1>
-          <p style={{ color: "#DCD2B8", fontSize: 15, lineHeight: 1.6, margin: 0 }}>
-            Teachers, institutes and exam bodies list tests here; candidates buy, attempt online, and get an instant
-            score report with topic-wise analysis. Teachers also sell worksheets, notes and slides for every board and class.
-          </p>
+          <div className="hero-benefits">
+            <div className="hero-benefit">
+              <div className="hero-benefit-title"><GraduationCap size={17} /> For students</div>
+              <div>Real exam pattern with a timer, instant results, percentile rank, weak-topic analysis and every answer explained. Chapter tests to full mocks.</div>
+            </div>
+            <div className="hero-benefit">
+              <div className="hero-benefit-title"><Store size={17} /> For teachers &amp; institutes</div>
+              <div>Upload by CSV, generate with AI or scan a paper. Sell tests, notes and worksheets, run live tests and passes, and get paid to UPI or bank.</div>
+            </div>
+            <div className="hero-benefit">
+              <div className="hero-benefit-title"><Gift size={17} /> Refer &amp; save</div>
+              <div>Students get 50% off their next test for every friend who buys. Teachers earn ₹200 per referral. Also on WhatsApp — no app needed.</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -5079,6 +5113,20 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
         .nav-tab:not(.active):hover { background: rgba(255,255,255,0.08); color: ${T.paper}; }
 
         .hero-band { background: ${T.ink}; padding: 44px 28px 40px; background-image: radial-gradient(circle at 85% 20%, rgba(232,163,61,0.16), transparent 55%); }
+        .hero-grid { display: flex; flex-wrap: wrap; gap: 28px 40px; align-items: center; max-width: 1180px; }
+        .hero-grid > div:first-child { flex: 1 1 460px; }
+        .hero-benefits { flex: 1 1 320px; display: grid; gap: 12px; max-width: 460px; }
+        .hero-benefit { background: rgba(251,247,238,0.06); border: 1px solid rgba(251,247,238,0.16); border-radius: 10px; padding: 14px 16px; color: #DCD2B8; font-size: 13.5px; line-height: 1.55; }
+        .hero-benefit-title { display: flex; align-items: center; gap: 8px; color: ${T.paper}; font-family: var(--font-display); font-size: 17px; margin-bottom: 4px; }
+        .hero-benefit-title svg { color: ${T.saffron}; }
+        .hero-cta { padding: 11px 18px; font-size: 14.5px; }
+        .hero-cta-main { background: ${T.saffron} !important; color: ${T.ink} !important; border-color: ${T.saffron} !important; font-weight: 600; }
+        .hero-cta-main:hover { background: #F3C277 !important; }
+        .hero-cta-ghost { color: ${T.paper} !important; border-color: rgba(251,247,238,0.45) !important; background: transparent !important; }
+        .hero-stats { display: flex; flex-wrap: wrap; gap: 14px 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(251,247,238,0.14); }
+        .hero-stats div { display: flex; flex-direction: column; }
+        .hero-stats strong { font-family: var(--font-display); font-size: 26px; color: ${T.saffron}; line-height: 1.1; font-weight: 600; }
+        .hero-stats span { font-size: 12.5px; color: #DCD2B8; }
 
         .search-box { display: flex; align-items: center; gap: 8px; border: 1px solid ${T.line}; border-radius: 6px; padding: 8px 12px; background: #fff; flex: 1; min-width: 220px; }
         .search-box input { border: none; outline: none; flex: 1; font-size: 13.5px; background: transparent; }
@@ -5348,6 +5396,8 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
       )}
       {role === "marketplace" && (!productView || productIsBundle) && (
         <Marketplace
+          session={session}
+          onJoin={(r) => openAuth(r, "register")}
           tests={tests}
           bundles={bundles}
           ads={marketplaceAds}
