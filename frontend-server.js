@@ -176,6 +176,14 @@ function renderHomeDirectory(allTests) {
       <h1>TestMandi — MCQ practice tests for NEET, JEE, UPSC, SSC, Banking &amp; more</h1>
       <p>Buy online MCQ practice tests and full mock tests for 30+ Indian competitive exams, with instant score reports and topic-wise breakdowns — or sell your own tests as a teacher or institute.</p>
       <nav aria-label="All tests">${sections}</nav>
+      <nav aria-label="More from the TestMandi team">
+        <h2>More from our team</h2>
+        <ul>
+          <li><a href="https://www.classcoach.in/?utm_source=testmandi&amp;utm_medium=home_links">ClassCoach</a> — AI test maker for teachers and coaching institutes: tests in a minute, auto-grading, parent reports on WhatsApp</li>
+          <li><a href="https://yneet.in/?utm_source=testmandi&amp;utm_medium=home_links">YNeet</a> — NEET preparation with practice, PYQs and mock tests</li>
+          <li><a href="https://vasulbook.com/?utm_source=testmandi&amp;utm_medium=home_links">VasulBook</a> — collect fee and payment dues with automatic reminders</li>
+        </ul>
+      </nav>
     </div>`;
 }
 
