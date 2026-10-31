@@ -82,6 +82,11 @@ ${body}
 <footer><div>
   <a href="/">TestMandi</a><a href="/blog">Blog</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a>
   <a href="mailto:info@testmandi.in">info@testmandi.in</a><span>© ${new Date().getFullYear()} TestMandi</span>
+</div><div>
+  <span>More from our team:</span>
+  <a href="https://www.classcoach.in/?utm_source=testmandi&amp;utm_medium=blog_footer">ClassCoach — AI tests for teachers</a>
+  <a href="https://yneet.in/?utm_source=testmandi&amp;utm_medium=blog_footer">YNeet — NEET preparation</a>
+  <a href="https://vasulbook.com/?utm_source=testmandi&amp;utm_medium=blog_footer">VasulBook — collect fee dues</a>
 </div></footer>
 </body>
 </html>`;

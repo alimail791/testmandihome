@@ -4312,7 +4312,7 @@ const SISTER_SITES = [
     offer: "Try 5 days for ₹99", cta: "Start NEET prep",
   },
   {
-    name: "ClassCoach", url: "https://classcoach.in/?utm_source=testmandi&utm_medium=referral", domain: "classcoach.in",
+    name: "ClassCoach", url: "https://www.classcoach.in/?utm_source=testmandi&utm_medium=referral", domain: "classcoach.in",
     who: "For tutors & teachers", Icon: Users,
     pitch: "Your AI teaching assistant: grade descriptive answers, create class slides, and share notes and question banks with your students.",
     offer: "1 month free trial", cta: "Try ClassCoach free",
