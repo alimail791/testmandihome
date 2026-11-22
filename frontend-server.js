@@ -16,7 +16,10 @@ const PORT = process.env.PORT || 8080;
 // Same backend the SPA itself talks to (see src/api.js / VITE_API_BASE).
 const API_BASE = process.env.VITE_API_BASE || "https://testmandiserver-production.up.railway.app";
 
-const BOT_UA = /googlebot|bingbot|yandexbot|duckduckbot|baiduspider|slurp|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|applebot/i;
+// AI search/answer crawlers mostly do NOT run JavaScript, so without being on
+// this list they saw an empty <div id="root"> on every test page — which is why
+// TestMandi can't show up in ChatGPT / Perplexity / Claude answers.
+const BOT_UA = /googlebot|google-inspectiontool|bingbot|yandexbot|duckduckbot|baiduspider|slurp|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|applebot|gptbot|oai-searchbot|chatgpt-user|perplexitybot|perplexity-user|claudebot|claude-searchbot|claude-user|anthropic-ai|ccbot|amazonbot|meta-externalagent|bytespider|youbot|cohere-ai|mistralai-user/i;
 
 const TESTMANDI_CONTACT_EMAIL = "info@testmandi.in";
 
@@ -195,7 +198,11 @@ function renderTestPageHtml(template, test, origin, allTests = []) {
     ? `${baseDescription} Covers ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? " and more" : ""} — ${questionCount} questions, instant score report with topic-wise breakdown on TestMandi.`
     : `${baseDescription} ${questionCount} questions, ${test.duration || "timed"} — instant score report on TestMandi.`
   ).slice(0, 300);
-  const title = `${test.title} — TestMandi`;
+  // Searchers type "mock test", "online", "free" — put the action and price in
+  // the title so the result wins the click.
+  const priceLabel = Number(test.price) ? `₹${Number(test.price)}` : "Free";
+  const mockWord = /mock|test/i.test(test.title) ? "" : " Mock Test";
+  const title = `${test.title}${mockWord} — ${priceLabel} Online, ${questionCount} Qs | TestMandi`;
   const url = `${origin}/tests/${test.id}/${slugify(test.title)}`;
   const image = `${origin}/og-image.png`;
 
@@ -295,25 +302,6 @@ function renderTestPageHtml(template, test, origin, allTests = []) {
   return html;
 }
 
-// Organization + WebSite structured data for the homepage — identifies
-// TestMandi itself as an entity to Google, separate from any one test page.
-function buildHomeJsonLd(origin) {
-  return { "@context": "https://schema.org", "@graph": [
-    {
-      "@type": "Organization",
-      name: "TestMandi",
-      url: `${origin}/`,
-      description: "India's marketplace for exam-prep MCQ practice tests — NEET, JEE, UPSC, SSC, Banking, GATE and more.",
-      email: TESTMANDI_CONTACT_EMAIL,
-    },
-    {
-      "@type": "WebSite",
-      name: "TestMandi",
-      url: `${origin}/`,
-    },
-  ] };
-}
-
 const app = express();
 
 /* ---------------------------------------------------------------------- */
@@ -376,6 +364,57 @@ app.get("/admin/blog", (req, res) => {
 });
 
 
+// Private/utility pages: keep them out of the index without blocking crawl
+// (a robots.txt Disallow would stop Google from ever seeing the noindex).
+app.use((req, res, next) => {
+  if (/^\/(cart|admin)(\/|$)/.test(req.path)) res.set("X-Robots-Tag", "noindex, follow");
+  next();
+});
+
+// Live sitemap: the old one was written at build time, so every test a seller
+// published after the last deploy was missing until the next redeploy.
+app.get("/sitemap.xml", async (req, res) => {
+  const [tests, resources] = await Promise.all([getAllTests(), getAllResources()]);
+  const day = (d) => (d ? new Date(d).toISOString().split("T")[0] : null);
+  const urls = [
+    { loc: `${SITE_ORIGIN}/` },
+    ...tests.map((t) => ({ loc: `${SITE_ORIGIN}${testUrl(t)}`, lastmod: day(t.updatedAt || t.createdAt) })),
+    ...resources.map((r) => ({ loc: `${SITE_ORIGIN}${resourceUrl(r)}`, lastmod: day(r.updatedAt || r.createdAt) })),
+    { loc: `${SITE_ORIGIN}/privacy` },
+    { loc: `${SITE_ORIGIN}/terms` },
+  ];
+  res.set("Cache-Control", "public, max-age=600");
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url><loc>${escapeHtml(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ""}</url>`).join("\n")}
+</urlset>
+`);
+});
+
+// Plain-text summary for AI assistants, built from the same live data as the
+// pages so the counts never disagree.
+app.get("/llms.txt", async (req, res) => {
+  const tests = await getAllTests();
+  const cats = [...new Set(tests.map((t) => t.category).filter(Boolean))];
+  const free = tests.filter((t) => !Number(t.price)).length;
+  res.set("Cache-Control", "public, max-age=600");
+  res.type("text/plain").send(`# TestMandi
+
+> TestMandi (${SITE_ORIGIN}) is an Indian marketplace for online MCQ practice tests and mock tests. Students buy and attempt tests online and get an instant score report with a topic-wise breakdown. Teachers, coaching institutes and schools sell their own tests and keep 80% of each sale.
+
+- Tests listed: ${tests.length} (${free} free)
+- Exams covered: ${cats.join(", ") || "NEET, JEE, UPSC, SSC, Banking"}
+- Prices in INR; pay online, attempt instantly in the browser
+- Contact: ${TESTMANDI_CONTACT_EMAIL}
+
+## Tests
+${tests.map((t) => `- [${t.title}](${SITE_ORIGIN}${testUrl(t)}): ${t.category || "General"}, ${Number(t.price) ? `₹${Number(t.price)}` : "Free"}`).join("\n")}
+
+## Blog
+- [TestMandi blog](${SITE_ORIGIN}/blog)
+`);
+});
+
 app.use(async (req, res, next) => {
   const ua = req.headers["user-agent"] || "";
   if (!BOT_UA.test(ua)) return next(); // real visitors: fall through to normal static serving below
@@ -391,11 +430,9 @@ app.use(async (req, res, next) => {
 
   if (req.path === "/") {
     const allTests = await getAllTests();
+    // Organization + WebSite JSON-LD already ship in index.html; injecting
+    // buildHomeJsonLd() too gave Google two Organization entities.
     const html = baseTemplate()
-      .replace(
-        "</head>",
-        `<script type="application/ld+json">${JSON.stringify(buildHomeJsonLd(origin))}</script>\n</head>`
-      )
       .replace('<div id="root"></div>', `<div id="root">${renderHomeDirectory(allTests)}</div>`);
     renderCache.set(cacheKey, { html, at: Date.now() });
     res.set("Content-Type", "text/html");
@@ -406,7 +443,7 @@ app.use(async (req, res, next) => {
   if (resMatch) {
     const all = await getAllResources();
     const r = all.find((x) => x.id === resMatch[1]);
-    if (!r) return next();
+    if (!r) return all.length ? res.status(404).sendFile(path.join(DIST_DIR, "index.html")) : next();
     const html = renderResourcePageHtml(baseTemplate(), r, origin, all);
     renderCache.set(cacheKey, { html, at: Date.now() });
     res.set("Content-Type", "text/html");
@@ -419,7 +456,9 @@ app.use(async (req, res, next) => {
   const testId = match[1];
   const tests = await getAllTests();
   const test = tests.find((t) => t.id === testId);
-  if (!test) return next();
+  // Unknown id: real 404, not a 200 "soft 404" copy of the homepage. Only when
+  // the API list loaded — if the API is down we don't want to 404 real tests.
+  if (!test) return tests.length ? res.status(404).sendFile(path.join(DIST_DIR, "index.html")) : next();
 
   const html = renderTestPageHtml(baseTemplate(), test, origin, tests);
   renderCache.set(cacheKey, { html, at: Date.now() });
@@ -438,8 +477,14 @@ app.use(express.static(DIST_DIR, { extensions: [] }));
 // pretending to be a valid page. A 200 on junk paths is a "soft 404" signal
 // that can hurt how much Google trusts the rest of the site's status codes.
 const KNOWN_APP_PATH = /^\/((tests|resources)\/[^/]+(\/.*)?|privacy|terms|cart)?$/;
-app.use((req, res) => {
+app.use(async (req, res) => {
   const indexHtml = path.join(DIST_DIR, "index.html");
+  // /tests/<unknown-id> used to return 200 for humans too (soft 404).
+  const idMatch = req.path.match(/^\/(tests|resources)\/([^/]+)/);
+  if (idMatch) {
+    const list = idMatch[1] === "tests" ? await getAllTests() : await getAllResources();
+    if (list.length && !list.some((x) => x.id === idMatch[2])) return res.status(404).sendFile(indexHtml);
+  }
   if (KNOWN_APP_PATH.test(req.path)) {
     return res.sendFile(indexHtml);
   }
