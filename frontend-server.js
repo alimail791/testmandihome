@@ -8,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { renderBlogIndex, renderBlogPost, renderBlogSitemap } from "./blog/render.js";
+import { renderCategoryPage, renderSellerPage, findCategoryByPath, groupByCategory, categoryPath, SELLER_PATH } from "./pages/render.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, "dist");
@@ -172,12 +173,13 @@ function renderHomeDirectory(allTests) {
     byCategory.get(c).push(t);
   }
   const sections = [...byCategory.entries()]
-    .map(([c, list]) => `<section><h2>${escapeHtml(c)} practice tests</h2>${linkList(list)}</section>`)
+    .map(([c, list]) => `<section><h2><a href="${escapeHtml(categoryPath(c))}">${escapeHtml(c)} mock tests</a></h2>${linkList(list)}</section>`)
     .join("");
   return `
     <div id="prerendered-seo-content">
       <h1>TestMandi — MCQ practice tests for NEET, JEE, UPSC, SSC, Banking &amp; more</h1>
       <p>Buy online MCQ practice tests and full mock tests for 30+ Indian competitive exams, with instant score reports and topic-wise breakdowns — or sell your own tests as a teacher or institute.</p>
+      <p><a href="${SELLER_PATH}">Teachers and institutes: sell your mock tests on TestMandi and keep 80% of every sale</a></p>
       <nav aria-label="All tests">${sections}</nav>
       <nav aria-label="More from the TestMandi team">
         <h2>More from our team</h2>
@@ -237,7 +239,7 @@ function renderTestPageHtml(template, test, origin, allTests = []) {
         const related = relatedTests(test, allTests);
         return related.length ? `<nav aria-label="Related tests"><h2>More ${escapeHtml(test.category || "")} tests</h2>${linkList(related)}</nav>` : "";
       })()}
-      <p><a href="/">Browse all tests on TestMandi</a></p>
+      <p><a href="${escapeHtml(categoryPath(test.category || "Other"))}">All ${escapeHtml(test.category || "")} mock tests</a> · <a href="/">Browse all tests on TestMandi</a> · <a href="${SELLER_PATH}">Sell your own tests</a></p>
     </div>`;
   html = html.replace('<div id="root"></div>', `<div id="root">${crawlableBlock}</div>`);
 
@@ -292,7 +294,7 @@ function renderTestPageHtml(template, test, origin, allTests = []) {
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "TestMandi", item: `${origin}/` },
-        { "@type": "ListItem", position: 2, name: test.category || "Tests", item: `${origin}/` },
+        { "@type": "ListItem", position: 2, name: `${test.category || "Other"} mock tests`, item: `${origin}${categoryPath(test.category || "Other")}` },
         { "@type": "ListItem", position: 3, name: test.title, item: url },
       ],
     },
@@ -364,6 +366,20 @@ app.get("/admin/blog", (req, res) => {
 });
 
 
+/* Search landing pages, rendered for every visitor (like /blog):           */
+/* /<exam>-mock-tests hubs and the seller page. See pages/render.js.        */
+app.get(SELLER_PATH, async (req, res) => {
+  res.set("Cache-Control", "public, max-age=300");
+  res.type("html").send(renderSellerPage(await getAllTests(), SITE_ORIGIN));
+});
+app.get(/^\/[a-z0-9-]+-mock-tests$/, async (req, res, next) => {
+  const tests = await getAllTests();
+  const cat = findCategoryByPath(tests, req.path);
+  if (!cat) return next(); // unknown exam → 404 via the fallback below
+  res.set("Cache-Control", "public, max-age=300");
+  res.type("html").send(renderCategoryPage(cat, tests, SITE_ORIGIN));
+});
+
 // Private/utility pages: keep them out of the index without blocking crawl
 // (a robots.txt Disallow would stop Google from ever seeing the noindex).
 app.use((req, res, next) => {
@@ -378,6 +394,8 @@ app.get("/sitemap.xml", async (req, res) => {
   const day = (d) => (d ? new Date(d).toISOString().split("T")[0] : null);
   const urls = [
     { loc: `${SITE_ORIGIN}/` },
+    { loc: `${SITE_ORIGIN}${SELLER_PATH}` },
+    ...groupByCategory(tests).filter((c) => c.indexable).map((c) => ({ loc: `${SITE_ORIGIN}${c.path}` })),
     ...tests.map((t) => ({ loc: `${SITE_ORIGIN}${testUrl(t)}`, lastmod: day(t.updatedAt || t.createdAt) })),
     ...resources.map((r) => ({ loc: `${SITE_ORIGIN}${resourceUrl(r)}`, lastmod: day(r.updatedAt || r.createdAt) })),
     { loc: `${SITE_ORIGIN}/privacy` },
@@ -406,6 +424,12 @@ app.get("/llms.txt", async (req, res) => {
 - Exams covered: ${cats.join(", ") || "NEET, JEE, UPSC, SSC, Banking"}
 - Prices in INR; pay online, attempt instantly in the browser
 - Contact: ${TESTMANDI_CONTACT_EMAIL}
+
+## Exam pages
+${groupByCategory(tests).map((c) => `- [${c.name} mock tests](${SITE_ORIGIN}${c.path}): ${c.tests.length} test${c.tests.length === 1 ? "" : "s"}`).join("\n")}
+
+## For teachers and institutes
+- [Sell mock tests on TestMandi](${SITE_ORIGIN}${SELLER_PATH}): free to list, seller keeps 80% of each sale
 
 ## Tests
 ${tests.map((t) => `- [${t.title}](${SITE_ORIGIN}${testUrl(t)}): ${t.category || "General"}, ${Number(t.price) ? `₹${Number(t.price)}` : "Free"}`).join("\n")}

@@ -12,7 +12,7 @@ export function escapeHtml(str) {
 const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "");
 const minutes = (html) => Math.max(1, Math.round(String(html || "").replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length / 200));
 
-function layout({ title, description, canonical, image, jsonLd, body }) {
+export function layout({ title, description, canonical, image, jsonLd, body }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(
 <body>
 <header class="bar"><div class="bar-in">
   <a class="brand" href="/">Test<span>Mandi</span></a>
-  <nav><a href="/blog">Blog</a><a href="/">Browse tests</a><a class="btn" href="/">Sign up free</a></nav>
+  <nav><a href="/blog">Blog</a><a href="/">Browse tests</a><a href="/sell-mock-tests-online">Sell your tests</a><a class="btn" href="/?join=buyer">Sign up free</a></nav>
 </div></header>
 ${body}
 <footer><div>
