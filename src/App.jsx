@@ -4719,6 +4719,17 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
   const openAuth = (role, mode = "login") => { setLoginError(""); setAuthModal({ mode, role }); };
   const closeAuth = () => { setAuthModal(null); setLoginError(""); };
 
+  // Deep link from the server-rendered landing pages: /?join=seller or
+  // /?join=buyer opens the register form with that role pre-selected.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const join = url.searchParams.get("join");
+    if (join !== "seller" && join !== "buyer") return;
+    openAuth(join, "register");
+    url.searchParams.delete("join");
+    window.history.replaceState({}, "", url.toString());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const upsertLocalUser = (u) => setRegisteredUsers((rs) => {
     const exists = rs.some((r) => r.email === u.email);
     return exists ? rs.map((r) => (r.email === u.email ? u : r)) : [...rs, u];
