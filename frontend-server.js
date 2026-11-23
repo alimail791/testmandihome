@@ -8,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { renderBlogIndex, renderBlogPost, renderBlogSitemap } from "./blog/render.js";
+import { buildTestSeo } from "./src/seo.js";
 import { renderCategoryPage, renderSellerPage, findCategoryByPath, groupByCategory, categoryPath, SELLER_PATH } from "./pages/render.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -195,16 +196,18 @@ function renderHomeDirectory(allTests) {
 function renderTestPageHtml(template, test, origin, allTests = []) {
   const topics = extractTopics(test);
   const questionCount = test.questionCount ?? test.questions?.length ?? 0;
-  const baseDescription = test.description || `Practice test: ${test.title}.`;
+  const seo = buildTestSeo(test);
+  const baseDescription = seo.description || test.description || `Practice test: ${test.title}.`;
   const description = (topics.length
-    ? `${baseDescription} Covers ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? " and more" : ""} — ${questionCount} questions, instant score report with topic-wise breakdown on TestMandi.`
-    : `${baseDescription} ${questionCount} questions, ${test.duration || "timed"} — instant score report on TestMandi.`
+    ? (seo.description
+      ? `${baseDescription} Covers ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? " and more" : ""}.`
+      : `${baseDescription} Covers ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? " and more" : ""} — ${questionCount} questions, instant score report with topic-wise breakdown on TestMandi.`)
+    : (seo.description ? baseDescription : `${baseDescription} ${questionCount} questions, ${test.duration || "timed"} — instant score report on TestMandi.`)
   ).slice(0, 300);
   // Searchers type "mock test", "online", "free" — put the action and price in
   // the title so the result wins the click.
-  const priceLabel = Number(test.price) ? `₹${Number(test.price)}` : "Free";
-  const mockWord = /mock|test/i.test(test.title) ? "" : " Mock Test";
-  const title = `${test.title}${mockWord} — ${priceLabel} Online, ${questionCount} Qs | TestMandi`;
+  // Title rules live in src/seo.js (shared with the SPA).
+  const title = seo.title;
   const url = `${origin}/tests/${test.id}/${slugify(test.title)}`;
   const image = `${origin}/og-image.png`;
 
@@ -305,6 +308,16 @@ function renderTestPageHtml(template, test, origin, allTests = []) {
 }
 
 const app = express();
+
+// One host only. Search Console had both www.testmandi.in and testmandi.in
+// pages indexed as separate URLs, splitting ranking signals. Everything on
+// www (any path) 301s to the canonical SITE_ORIGIN.
+app.use((req, res, next) => {
+  if ((req.hostname || "").startsWith("www.")) {
+    return res.redirect(301, `${SITE_ORIGIN}${req.originalUrl}`);
+  }
+  next();
+});
 
 /* ---------------------------------------------------------------------- */
 /* Blog — /blog, /blog/:slug, /blog-sitemap.xml and the /admin/blog editor. */
