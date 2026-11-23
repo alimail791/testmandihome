@@ -8,8 +8,8 @@
 // Test 1 (20 Questions)", which doesn't match how students search. Titles now
 // lead with the chapter name and the words they type (NEET, MCQs, PYQ).
 //
-// Wording is deliberately "PYQ Pattern", not "PYQ": these are practice MCQs
-// in the previous-year-question style, not a previous-year paper.
+// Chapter and subject tests include NEET/JEE previous-year questions (PYQs),
+// confirmed by Akbar, so titles say "PYQ & MCQs".
 
 const BRAND = " | TestMandi";
 const MAX_TITLE = 60; // roughly where Google truncates on mobile
@@ -39,8 +39,8 @@ export function buildTestSeo(test) {
     const [, exam, subject, chapter, set, qs] = m;
     const n = qs || q;
     const isNeet = /^neet/i.test(exam);
-    const title = withBrand(`${chapter} ${isNeet ? "NEET" : "JEE Main"} MCQs, PYQ Pattern – Set ${set} | ${price}`);
-    const description = `${n} ${chapter} ${isNeet ? "NEET" : "JEE Main"} ${subject} MCQs in PYQ pattern. Timed online test, instant score & topic-wise report. ${price === "Free" ? "Free" : `Only ${price}`}.`;
+    const title = withBrand(`${chapter} ${isNeet ? "NEET" : "JEE Main"} PYQ & MCQs – Set ${set} | ${price}`);
+    const description = `${n} ${chapter} ${isNeet ? "NEET" : "JEE Main"} ${subject} PYQs & MCQs. Timed online test, instant score & topic-wise report. ${price === "Free" ? "Free" : `Only ${price}`}.`;
     return { title, description };
   }
 
@@ -64,8 +64,8 @@ export function buildTestSeo(test) {
   if ((m = raw.match(/^(NEET|JEE Main)\s+([A-Za-z]+)\s+Practice Test\s*(\d+)\s*(?:\((\d+)\s*Questions?\))?/i))) {
     const [, exam, subject, set, qs] = m;
     return {
-      title: withBrand(`${exam} ${subject} MCQ Practice Test ${set} – ${qs || q} Qs | ${price}`),
-      description: `${qs || q} ${exam} ${subject} MCQs in previous-year-question pattern, mixed chapters. Timed online test with instant score and topic-wise report. ${price}.`,
+      title: withBrand(`${exam} ${subject} PYQ & MCQ Practice Test ${set} – ${qs || q} Qs | ${price}`),
+      description: `${qs || q} ${exam} ${subject} PYQs & MCQs, mixed chapters. Timed online test with instant score and topic-wise report. ${price}.`,
     };
   }
 
