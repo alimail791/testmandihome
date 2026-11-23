@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from "rea
 import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { api } from "./api.js";
+import { buildTestSeo } from "./seo.js";
 import { T } from "./theme.js";
 import {
   ProductCard, ProductPage, ResourceBrowser, SellerResourcesPanel, MyResourcesPanel,
@@ -4610,8 +4611,10 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
       title = `${sharedResource.title} — ${sharedResource.price ? `₹${sharedResource.price}` : "Free"} | TestMandi`;
       description = (sharedResource.description || `${sharedResource.resourceType} for ${sharedResource.grade} on TestMandi.`).slice(0, 160);
     } else if (sharedItem) {
-      title = `${sharedItem.title} — ₹${sharedItem.price} | TestMandi`;
-      description = (sharedItem.description || `Practice test on TestMandi with ${sharedItem.questionCount ?? sharedItem.questions?.length ?? ""} questions.`).slice(0, 160);
+      // Same title/description the crawler HTML gets (src/seo.js).
+      const seo = buildTestSeo(sharedItem);
+      title = seo.title;
+      description = (seo.description || sharedItem.description || `Practice test on TestMandi with ${sharedItem.questionCount ?? sharedItem.questions?.length ?? ""} questions.`).slice(0, 160);
     } else if (role === "seller") { title = "Seller Studio — TestMandi"; description = "Create and sell MCQ practice tests on TestMandi."; }
     else if (role === "learning") { title = "My Learning — TestMandi"; noindex = true; }
     else if (role === "ads") { title = "Ads Studio — TestMandi"; description = "Advertise on TestMandi's exam-prep marketplace."; }
@@ -4634,7 +4637,10 @@ function AppShell({ routeTestId, routeResourceId, routeRole }) {
     // told Google every test link was just a duplicate of the homepage,
     // which is exactly what was suppressing them from being indexed on
     // their own.
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://testmandi.in";
+    // Always the one canonical host. Using window.location.origin made a page
+    // opened on www.testmandi.in declare itself canonical on www — that's how
+    // both hosts ended up indexed as duplicates.
+    const origin = "https://testmandi.in";
     const canonicalUrl = sharedResource
       ? `${origin}${itemPath(asResource(sharedResource))}`
       : sharedItem
