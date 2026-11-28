@@ -2259,6 +2259,17 @@ function SellerStudio({ myTests, mySellerBundles, sellerShare, onPublish, sessio
         )}
       </div>
 
+      {/* Raise network: tutors who teach their own classes get ClassCoach (tests sync here with one click) and VasulBook (fee dues). */}
+      <div style={{ marginBottom: 22, padding: "14px 18px", border: "1px solid #e5e0d3", borderRadius: 10, background: "#FBF7EE", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: "0.92rem", color: "#1c2b4a", lineHeight: 1.5 }}>
+          <strong>Teach your own classes too?</strong> Run them on ClassCoach — AI test maker, auto-grading and parent reports — then sell any test here in one click. Collect fees with VasulBook reminders.
+        </span>
+        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <a className="btn-outline" href="https://www.classcoach.in/?utm_source=testmandi&utm_medium=seller_studio" target="_blank" rel="noopener noreferrer">Try ClassCoach</a>
+          <a className="btn-outline" href="https://vasulbook.com/?utm_source=testmandi&utm_medium=seller_studio" target="_blank" rel="noopener noreferrer">VasulBook</a>
+        </span>
+      </div>
+
       <PayoutPanel
         sellerKey={sellerName}
         available={available}
@@ -4420,6 +4431,12 @@ function SiteFooter({ onNavigate }) {
       >
         <FileText size={16} /> Terms of Service
       </button>
+      <span style={{ display: "inline-flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ color: "#9ca3af" }}>Also from us:</span>
+        <a href="https://www.classcoach.in/?utm_source=testmandi&utm_medium=footer" target="_blank" rel="noopener noreferrer" style={{ color: "#1c2b4a", fontWeight: 600, textDecoration: "none" }}>ClassCoach</a>
+        <a href="https://vasulbook.com/?utm_source=testmandi&utm_medium=footer" target="_blank" rel="noopener noreferrer" style={{ color: "#1c2b4a", fontWeight: 600, textDecoration: "none" }}>VasulBook</a>
+        <a href="https://www.yneet.in/?utm_source=testmandi&utm_medium=footer" target="_blank" rel="noopener noreferrer" style={{ color: "#1c2b4a", fontWeight: 600, textDecoration: "none" }}>YNeet</a>
+      </span>
       <span style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
         © {new Date().getFullYear()} TestMandi. All rights reserved.
       </span>
